@@ -1,0 +1,96 @@
+[gd_scene format=3 uid="uid://cot1lhq4v7qq6"]
+
+[ext_resource type="Script" uid="uid://c5afarsbnebem" path="res://scripts/CameraController.cs" id="1_jka67"]
+[ext_resource type="Shader" uid="uid://csifhdipq5x7" path="res://defualtGridShader.gdshader" id="1_r3fl7"]
+[ext_resource type="Script" uid="uid://fn2tqsh65fm8" path="res://scripts/MatchManager.cs" id="2_jka67"]
+[ext_resource type="Script" uid="uid://c75g5hk4hc3im" path="res://scripts/Player.cs" id="3_i5arm"]
+[ext_resource type="Script" uid="uid://d0brfe7tnn8dw" path="res://scripts/DebugDraw.cs" id="4_wc5p8"]
+
+[sub_resource type="Environment" id="Environment_s68cd"]
+ambient_light_energy = 0.0
+
+[sub_resource type="ShaderMaterial" id="ShaderMaterial_jr3p7"]
+render_priority = 0
+shader = ExtResource("1_r3fl7")
+shader_parameter/grid_size = 1.0
+shader_parameter/line_color = Color(0.08, 0.08, 0.08, 1)
+shader_parameter/fill_color = Color(0.7, 0.7, 0.7, 1)
+shader_parameter/line_width = 0.1
+shader_parameter/emission_strength = 1.0
+
+[sub_resource type="ShaderMaterial" id="ShaderMaterial_qvnt5"]
+render_priority = 0
+shader = ExtResource("1_r3fl7")
+shader_parameter/grid_size = 1.0
+shader_parameter/line_color = Color(0.08, 0.08, 0.08, 1)
+shader_parameter/fill_color = Color(0.7, 0.7, 0.7, 1)
+shader_parameter/line_width = 0.04
+shader_parameter/emission_strength = 1.0
+
+[sub_resource type="ShaderMaterial" id="ShaderMaterial_8h4pb"]
+render_priority = 0
+shader = ExtResource("1_r3fl7")
+shader_parameter/grid_size = 1.0
+shader_parameter/line_color = Color(0.08, 0.08, 0.08, 1)
+shader_parameter/fill_color = Color(0.7, 0.7, 0.7, 1)
+shader_parameter/line_width = 0.04
+shader_parameter/emission_strength = 1.0
+
+[sub_resource type="BoxMesh" id="BoxMesh_qptqn"]
+
+[node name="ActualFighting" type="Node3D" unique_id=2120865207]
+
+[node name="Camera3D" type="Camera3D" parent="." unique_id=226205522]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1, 4)
+fov = 50.0
+script = ExtResource("1_jka67")
+
+[node name="WorldEnvironment" type="WorldEnvironment" parent="." unique_id=1620655634]
+environment = SubResource("Environment_s68cd")
+
+[node name="world" type="Node3D" parent="." unique_id=771471437]
+
+[node name="walls and floor" type="Node3D" parent="world" unique_id=201691804]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, -0.5975033, 0)
+
+[node name="CSGBox3D" type="CSGBox3D" parent="world/walls and floor" unique_id=1567150229]
+size = Vector3(15, 0.5, 15)
+material = SubResource("ShaderMaterial_jr3p7")
+
+[node name="CSGBox3D2" type="CSGBox3D" parent="world/walls and floor" unique_id=1979778453]
+transform = Transform3D(1, 0, 0, 0, -4.371139e-08, -1, 0, 1, -4.371139e-08, 0, 5, -7.460076)
+size = Vector3(15, 0.5, 10)
+material = SubResource("ShaderMaterial_qvnt5")
+
+[node name="CSGBox3D3" type="CSGBox3D" parent="world/walls and floor" unique_id=1988257576]
+transform = Transform3D(-4.371139e-08, -1, 0, 1, -4.371139e-08, 0, 0, 0, 1, 7.5, 5, 0)
+size = Vector3(10, 0.5, 15)
+material = SubResource("ShaderMaterial_8h4pb")
+
+[node name="CSGBox3D4" type="CSGBox3D" parent="world/walls and floor" unique_id=1628696503]
+transform = Transform3D(-4.371139e-08, -1, 0, 1, -4.371139e-08, 0, 0, 0, 1, -7.5, 5, 0)
+size = Vector3(10, 0.5, 15)
+material = SubResource("ShaderMaterial_8h4pb")
+
+[node name="MatchManager" type="Node3D" parent="." unique_id=1815988755]
+script = ExtResource("2_jka67")
+
+[node name="Player1" type="Node3D" parent="MatchManager" unique_id=1491745036]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -1.5, 0, 0)
+script = ExtResource("3_i5arm")
+
+[node name="Hitbox" type="MeshInstance3D" parent="MatchManager/Player1" unique_id=256438661]
+mesh = SubResource("BoxMesh_qptqn")
+
+[node name="Player2" type="Node3D" parent="MatchManager" unique_id=276147197]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 1.5, 0, 0)
+script = ExtResource("3_i5arm")
+PlayerNumber = 2
+
+[node name="MeshInstance3D" type="MeshInstance3D" parent="MatchManager/Player2" unique_id=1677013419]
+mesh = SubResource("BoxMesh_qptqn")
+
+[node name="DebugLayer" type="CanvasLayer" parent="." unique_id=273675407]
+
+[node name="DebugDraw" type="Node2D" parent="DebugLayer" unique_id=2093599107]
+script = ExtResource("4_wc5p8")

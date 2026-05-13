@@ -1,0 +1,48 @@
+; Engine configuration file.
+; It's best edited using the editor UI and not directly,
+; since the parameters that go here are not all obvious.
+;
+; Format:
+;   [section] ; section goes between []
+;   param=value ; assign values to parameters
+
+config_version=5
+
+[application]
+
+config/name="FightingGame"
+run/main_scene="res://node_3d.tscn"
+config/features=PackedStringArray("4.6", "C#", "Forward Plus")
+config/icon="res://icon.svg"
+
+[autoload]
+
+InputManager="*uid://c2dhxcmnfffq0"
+MatchManager="*uid://fn2tqsh65fm8"
+DebugManager="*uid://dalfe5c2fhi30"
+
+[dotnet]
+
+project/assembly_name="FightingGame"
+
+[input]
+
+debug_freeze={
+"deadzone": 0.2,
+"events": [Object(InputEventKey,"resource_local_to_scene":false,"resource_name":"","device":-1,"window_id":0,"alt_pressed":false,"shift_pressed":false,"ctrl_pressed":false,"meta_pressed":false,"pressed":false,"keycode":0,"physical_keycode":47,"key_label":0,"unicode":47,"location":0,"echo":false,"script":null)
+]
+}
+debug_advance={
+"deadzone": 0.2,
+"events": [Object(InputEventKey,"resource_local_to_scene":false,"resource_name":"","device":-1,"window_id":0,"alt_pressed":false,"shift_pressed":false,"ctrl_pressed":false,"meta_pressed":false,"pressed":false,"keycode":0,"physical_keycode":46,"key_label":0,"unicode":46,"location":0,"echo":false,"script":null)
+]
+}
+
+[physics]
+
+common/max_physics_steps_per_frame=1
+3d/physics_engine="Jolt Physics"
+
+[rendering]
+
+rendering_device/driver.windows="d3d12"
