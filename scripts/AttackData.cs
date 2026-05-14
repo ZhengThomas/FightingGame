@@ -2,34 +2,49 @@ using System.Collections.Generic;
 using System.Numerics;
 
 public enum MoveType { Light, Medium, Heavy, CrouchLight, CrouchMedium, CrouchHeavy, Jump, Dash }
-public class AttackData
+
+// Base class for all move data. Contains the frame structure and hitbox information
+// shared by every move type.
+public class MoveData
 {
-    // frame data
-    public int Startup;       // frames before active
-    public int Active;        // frames hitbox is out
-    public int Recovery;      // frames after active before you can act
+    public int Startup;      // frames before active
+    public int Active;       // frames hitbox is out
+    public int Recovery;     // frames after active before the player can act
 
-    // properties
     public int Damage;
-    public int HitStun;       // frames opponent is in hitstun on hit
-    public int BlockStun;   // frames opponent is in blockstun on block
-    public float Pushback;    // horizontal slide applied while grounded in Hitstun
-    public float PushbackOnBlock;    // horizontal slide applied while grounded in Blockstun
-    public float LaunchForce; // launch velocity applied when sent airborne
-    public float LaunchForceOnBlock; // launch velocity applied when sent airborne on block
+    public MoveType Strength;
+    public int HitPauseDuration;
 
-    // hitbox — where the attack hits
+    // per-frame hitboxes (indexed from the first active frame)
     public List<Box>[] HitboxesPerFrame;
 
-    // index = any attack frame (0-based, covers startup+active+recovery), value = list of hurtboxes that frame
+    // per-frame hurtbox overrides (0-based over startup+active+recovery); null entry = use default pose
     public List<Box>[] HurtboxesPerFrame;
+}
 
-    // properties flags
-    public bool IsOverhead;           // hits crouching block
-    public bool IsLow;                // must be blocked crouching
-    public bool LaunchesOpponent;     // sends them airborne on hit
+// Data for a normal (non-grab) attack.
+public class AttackData : MoveData
+{
+    public int HitStun;
+    public int BlockStun;
+    public float Pushback;
+    public float PushbackOnBlock;
+    public float LaunchForce;
+    public float LaunchForceOnBlock;
+
+    public bool IsOverhead;       // must be blocked standing
+    public bool IsLow;            // must be blocked crouching
+    public bool LaunchesOpponent; // sends the opponent airborne on hit
     public List<MoveType> CancellableInto;
-    public MoveType Strength;    // Light, Medium, or Heavy
+}
 
-    public int HitPauseDuration;
+// Data for a grab move.
+public class GrabData : MoveData
+{
+    public int GrabSequenceDuration; // total frames of the whole animation
+
+    // Positional offsets for both the attacker and the defender per frame
+    // These offsets are "how much do i move on frame x" rather than "where am i on frame x"
+    public List<Vector3> AttackerOffsetsPerFrame;
+    public List<Vector3> DefenderOffsetsPerFrame;
 }

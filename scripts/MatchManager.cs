@@ -226,7 +226,7 @@ public partial class MatchManager : Node
 
 		int facingMult = attacker.GetFacing() == FacingDirection.Right ? 1 : -1;
 
-		foreach (ActiveAttack attack in attacker.GetActiveAttacks())
+		foreach (ActiveMove attack in attacker.GetActiveMoves())
 		{
 			if (defender.WasAlreadyHitBy(attack.Id)) continue;
 
@@ -253,9 +253,21 @@ public partial class MatchManager : Node
 					{
 						GD.Print($"{attacker.PlayerNumber} hit {defender.PlayerNumber}!");
 						int attackDir = attacker.Position.X < defender.Position.X ? 1 : -1;
-						bool blocked = defender.TakeHit(attack.Data, attack.Id, attackDir, attacker);
-						attacker.RegisterHit(attack.Id, blocked);
-						TriggerHitPause(attack.Data.HitPauseDuration, attack.Data.Strength);
+
+						if (attack.Data is GrabData grabData)
+						{
+							if(defender.InGrabbableState())
+							{
+								defender.GetGrabbed(grabData, attack.Id, attacker);
+								attacker.RegisterGrab(defender, grabData);
+							}
+						}
+						else if (attack.Data is AttackData hitData)
+						{
+							bool blocked = defender.TakeHit(hitData, attack.Id, attackDir, attacker);
+							attacker.RegisterHit(attack.Id, blocked);
+							TriggerHitPause(hitData.HitPauseDuration, hitData.Strength);
+						}
 
 						return;
 					}
@@ -266,7 +278,7 @@ public partial class MatchManager : Node
 
 	private void DrawAttackStateIndicator(Player player)
 	{
-		var attack = player.CurrentAttack;
+		var attack = player.CurrentMove;
 		if (attack == null) return;
 
 		int startupEnd = attack.Data.Startup;

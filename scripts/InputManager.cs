@@ -126,7 +126,7 @@ public static class InputQuery
         // First we find the very last input of the motion input 
         // Hitpause doesnt count down the buffer window for the last input of the motion input, for game feel
         int i = startFrom;
-        int maxSearch = motion.MaxStepGap;
+        int maxSearch = PlayerConstants.BufferWindow;
         int totalWindow = motion.TotalWindow;
         while (i < buffer.Length && i < maxSearch)
         {
@@ -186,11 +186,18 @@ public static class InputQuery
     public static bool WasCharge(this InputFrame[] buffer, bool facingRight, ChargeInput charge)
     {
         // Step 1: find the most recent frame with any release direction within ReleaseWindow.
+        // Hitpause doesnt count down the buffer window for the last input of the motion input, for game feel
         int release = -1;
-        for (int f = 0; f < ChargeInput.ReleaseWindow && f < buffer.Length; f++)
+        int maxSearch = ChargeInput.ReleaseWindow;
+        for (int f = 0; f < maxSearch && f < buffer.Length; f++)
         {
-            if(charge.ReleaseDirs.Any(d => d == ClassifyDirection(buffer[f], facingRight))){
+            if (charge.ReleaseDirs.Any(d => d == ClassifyDirection(buffer[f], facingRight)))
+            {
                 release = f;
+            }
+            if(buffer[f].isDuringHitpause)
+            {
+                maxSearch++;
             }
         }
         if (release < 0) return false;

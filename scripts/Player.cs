@@ -81,9 +81,9 @@ public static class PlayerConstants
     public const float FixedDelta = 0.01666f; // Using a fixed number since the engine delta is not consistent
 }
 
-public class ActiveAttack
+public class ActiveMove
 {
-    public readonly AttackData Data;
+    public readonly MoveData Data;
     public readonly int Id;
     public int Frame;
     public bool HitLanded;
@@ -93,12 +93,12 @@ public class ActiveAttack
     private List<Box> lastValidHurtboxes = null;
     static readonly List<Box> emptyList = new List<Box>();
 
-    public ActiveAttack(AttackData data, int id)
+    public ActiveMove(MoveData data, int id)
     {
         Data = data;
         Id = id;
         Frame = 0;
-    }   
+    }
 
     public List<Box> GetCurrentHitboxes()
     {
@@ -155,6 +155,9 @@ public enum PlayerState
     Blockstun,      // in blockstun after blocking an attack
     CrouchBlockstun,
     AirBlockstun,
+    GrabOccurring,  // attacker tryna grab
+    GrabHit,        // attacker did hit grab, now playing out the animation
+    HitByGrab,      // defender got hit by some grab
 }
 public struct BackdashState
 {
@@ -174,6 +177,12 @@ public struct BlockReactionState
 {
     public int Frame;     // counts up each tick within the current phase
     public int Duration;  // total frames for the current phase
+}
+
+public struct GrabSequenceState
+{
+    public int Frame;    // counts up each tick during GrabHit / HitByGrab
+    public int Duration; // total frames of the grab cinematic
 }
 
 // Meant to be a hitbox or hurtbox or whatever
@@ -200,14 +209,16 @@ public partial class Player : Node3D
     public PhysicsState physics;
     PlayerState currentState = PlayerState.Idle;
     JumpState jump = new JumpState { JumpSquatFrame = -1, AirdashFrame = -1, LandingFrame = -1 };
-    ActiveAttack currentAttack = null;
+    ActiveMove currentMove = null;
 
     public PlayerState CurrentState => currentState;
-    public ActiveAttack CurrentAttack => currentAttack;
+    public ActiveMove CurrentMove => currentMove;
     public PhysicsState Physics => physics;
     BackdashState backdashInfo = new BackdashState{ BackDashFrame = -1 };
     HitReactionState hitReaction;
     BlockReactionState blockReaction;
+    GrabSequenceState grabSequence;
+    Player grabPartner = null; // the other player during GrabHit / HitByGrab
     MatchManager Match;
 
     List<Move> moveList;
@@ -239,65 +250,65 @@ public partial class Player : Node3D
             {
                 Name = "CrouchingLight",
                 Condition = (input) => physics.IsOnFloor && input.WasJustPressed(currentBufferWindow, f => f.LightAttack, [f => f.Down]) != null && CanCancelInto(MoveType.CrouchLight),
-                Execute = () => StartAttack(Moveset.CrouchingLight, PlayerState.CrouchAttacking),
+                Execute = () => StartMove(Moveset.CrouchingLight, PlayerState.CrouchAttacking),
             },
             new Move
             {
                 Name = "AirLight",
                 Condition = (input) => IsAirborneState(currentState) && input.WasJustPressed(currentBufferWindow, f => f.LightAttack) != null && CanCancelInto(MoveType.Light),
-                Execute = () => StartAttack(Moveset.AirLight, PlayerState.AirAttacking),
+                Execute = () => StartMove(Moveset.AirLight, PlayerState.AirAttacking),
             },
             new Move
             {
                 Name = "StandingLight",
                 Condition = (input) => input.WasJustPressed(currentBufferWindow, f => f.LightAttack, null, [f => f.Down]) != null && CanCancelInto(MoveType.Light),
-                Execute = () => StartAttack(Moveset.StandingLight, PlayerState.StandAttacking),
+                Execute = () => StartMove(Moveset.StandingLight, PlayerState.StandAttacking),
             },
             new Move
             {
                 Name = "CrouchingMedium",
                 Condition = (input) => physics.IsOnFloor && input.WasJustPressed(currentBufferWindow, f => f.MediumAttack, [f => f.Down]) != null && CanCancelInto(MoveType.CrouchMedium),
-                Execute = () => StartAttack(Moveset.CrouchingMedium, PlayerState.CrouchAttacking),
+                Execute = () => StartMove(Moveset.CrouchingMedium, PlayerState.CrouchAttacking),
             },
             new Move
             {
                 Name = "AirMedium",
                 Condition = (input) => IsAirborneState(currentState) && input.WasJustPressed(currentBufferWindow, f => f.MediumAttack) != null && CanCancelInto(MoveType.Medium),
-                Execute = () => StartAttack(Moveset.AirMedium, PlayerState.AirAttacking),
+                Execute = () => StartMove(Moveset.AirMedium, PlayerState.AirAttacking),
             },
             new Move
             {
                 Name = "StandingMedium",
                 Condition = (input) => input.WasJustPressed(currentBufferWindow, f => f.MediumAttack, null, [f => f.Down]) != null && CanCancelInto(MoveType.Medium),
-                Execute = () => StartAttack(Moveset.StandingMedium, PlayerState.StandAttacking),
+                Execute = () => StartMove(Moveset.StandingMedium, PlayerState.StandAttacking),
             },
             new Move
             {
                 Name = "CrouchingHeavy",
                 Condition = (input) => physics.IsOnFloor && input.WasJustPressed(currentBufferWindow, f => f.HeavyAttack, [f => f.Down]) != null && CanCancelInto(MoveType.CrouchHeavy),
-                Execute = () => StartAttack(Moveset.CrouchingHeavy, PlayerState.CrouchAttacking),
+                Execute = () => StartMove(Moveset.CrouchingHeavy, PlayerState.CrouchAttacking),
             },
             new Move
             {
                 Name = "AirHeavy",
                 Condition = (input) => IsAirborneState(currentState) && input.WasJustPressed(currentBufferWindow, f => f.HeavyAttack) != null && CanCancelInto(MoveType.Heavy),
-                Execute = () => StartAttack(Moveset.AirHeavy, PlayerState.AirAttacking),
+                Execute = () => StartMove(Moveset.AirHeavy, PlayerState.AirAttacking),
             },
             new Move
             {
                 Name = "StandingHeavy",
                 Condition = (input) => input.WasJustPressed(currentBufferWindow, f => f.HeavyAttack, null, [f => f.Down]) != null && CanCancelInto(MoveType.Heavy),
-                Execute = () => StartAttack(Moveset.StandingHeavy, PlayerState.StandAttacking),
+                Execute = () => StartMove(Moveset.StandingHeavy, PlayerState.StandAttacking),
             },
         };
     }
 
     public void RegisterHit(int attackId, bool blocked = false)
     {
-        if (currentAttack != null && currentAttack.Id == attackId)
+        if (currentMove != null && currentMove.Id == attackId)
         {
-            currentAttack.HitLanded = true;
-            currentAttack.Blocked = blocked;
+            currentMove.HitLanded = true;
+            currentMove.Blocked = blocked;
         }
     }
 
@@ -374,19 +385,19 @@ public partial class Player : Node3D
         }
     }
 
-    private void StartAttack(AttackData attackData, PlayerState AttackingState)
+    private void StartMove(MoveData moveData, PlayerState attackingState)
     {
-        TransitionTo(AttackingState);
+        TransitionTo(attackingState);
         // ID is derived from frame count and player number, like hashing but lazy
-        // could overflow if someone 2 billion frames pass, which is unlikely and i will ignore such a possibility
+        // could overflow if 2 billion frames pass, which is unlikely and i will ignore such a possibility
         int id = PlayerNumber * 1000000 + Match.FrameCount;
-        currentAttack = new ActiveAttack(attackData, id);
+        currentMove = new ActiveMove(moveData, id);
     }
 
-    public IEnumerable<ActiveAttack> GetActiveAttacks()
+    public IEnumerable<ActiveMove> GetActiveMoves()
     {
-        if (currentAttack != null)
-            yield return currentAttack;
+        if (currentMove != null)
+            yield return currentMove;
         // future: yield return each spawned projectile/attack here
     }
 
@@ -413,6 +424,37 @@ public partial class Player : Node3D
         return currentState == PlayerState.Blockstun
             || currentState == PlayerState.CrouchBlockstun
             || currentState == PlayerState.AirBlockstun;
+    }
+
+    public bool IsGrabbing()
+    {
+        return currentState == PlayerState.GrabOccurring;
+    }
+
+    public bool IsInGrabSequence()
+    {
+        return currentState == PlayerState.GrabHit || currentState == PlayerState.HitByGrab;
+    }
+
+    // Called by MatchManager when a grab hitbox connects.
+    // Sets this player up as the attacker for the grab cinematic.
+    public void RegisterGrab(Player defender, GrabData grabData)
+    {
+        grabPartner = defender;
+        grabSequence.Duration = grabData.GrabSequenceDuration;
+        TransitionTo(PlayerState.GrabHit);
+    }
+
+    // Called by MatchManager when this player is caught by a grab.
+    // Sets this player up as the defender for the grab cinematic.
+    public void GetGrabbed(GrabData grabData, int attackId, Player attacker)
+    {
+        hitHistory[hitHistoryIndex] = attackId;
+        hitHistoryIndex = (hitHistoryIndex + 1) % hitHistory.Length;
+
+        grabPartner = attacker;
+        grabSequence.Duration = grabData.GrabSequenceDuration;
+        TransitionTo(PlayerState.HitByGrab);
     }
 
     // Returns true if the given state is one where the player is allowed to block.
@@ -475,12 +517,17 @@ public partial class Player : Node3D
     static readonly List<Box> emptyBoxList = new List<Box>();
     public List<Box> GetCurrentHitboxes()
     {
-        return currentAttack?.GetCurrentHitboxes() ?? emptyBoxList;
+        return currentMove?.GetCurrentHitboxes() ?? emptyBoxList;
     }
     public List<Box> GetCurrentHurtboxes()
     {
         // Were immortal if were in the middle of waking up
         if (currentState == PlayerState.Wakeup)
+        {
+            return emptyBoxList;
+        }
+        // Both players are invulnerable for the duration of the grab cinematic
+        if (currentState == PlayerState.GrabHit || currentState == PlayerState.HitByGrab)
         {
             return emptyBoxList;
         }
@@ -490,8 +537,8 @@ public partial class Player : Node3D
             return CrouchingHurtbox;
         }
         // If were attacking, its based on our attack
-        if (IsAttacking() && currentAttack != null)
-            return currentAttack.GetHurtboxOverride() ?? GetDefaultHurtbox();
+        if (IsAttacking() && currentMove != null)
+            return currentMove.GetHurtboxOverride() ?? GetDefaultHurtbox();
         // Otherwise, its based on our current state, crouching/idle/jumping/etc.
         return GetDefaultHurtbox();
     }
@@ -514,6 +561,9 @@ public partial class Player : Node3D
             currentState == PlayerState.Airdashing ||
             currentState == PlayerState.StandAttacking ||
             currentState == PlayerState.CrouchAttacking ||
+            currentState == PlayerState.GrabOccurring ||
+            currentState == PlayerState.GrabHit ||
+            currentState == PlayerState.HitByGrab ||
             IsHurt()) && !forceOverride)
         {
             return;
@@ -528,6 +578,13 @@ public partial class Player : Node3D
     public FacingDirection GetFacing()
     {
         return lastFacing;
+    }
+
+    public bool InGrabbableState() {
+        return currentState != PlayerState.JumpSquat ||
+            !IsAirborneState(currentState) ||
+            !IsHurt() ||
+            !IsBlockingState();
     }
 
     // mostly for forward and backdash
@@ -709,6 +766,15 @@ public partial class Player : Node3D
             case PlayerState.AirBlockstun:
                 HandleAirBlockstunState();
                 break;
+            case PlayerState.GrabOccurring:
+                HandleGrabOccurringState();
+                break;
+            case PlayerState.GrabHit:
+                HandleGrabHitState();
+                break;
+            case PlayerState.HitByGrab:
+                HandleHitByGrabState();
+                break;
         }
     }
 
@@ -735,13 +801,64 @@ public partial class Player : Node3D
             TransitionTo(PlayerState.Jumping);
     }
 
+    private void HandleGrabOccurringState()
+    {
+        Decelerate();
+        currentMove.Frame++;
+
+        int startupEnd  = currentMove.Data.Startup;
+        int activeEnd   = startupEnd + currentMove.Data.Active;
+        int recoveryEnd = activeEnd  + currentMove.Data.Recovery;
+
+        // On grab connect, MatchManager calls EnterGrabHit directly — no HitLanded check needed here.
+        if (currentMove.Frame <= startupEnd)
+        {
+            // startup — not yet active
+        }
+        else if (currentMove.Frame <= activeEnd)
+        {
+            // active — grab hitbox is out
+        }
+        else if (currentMove.Frame <= recoveryEnd)
+        {
+            // recovery — grab whiffed
+        }
+        else
+        {
+            TransitionTo(PlayerState.Idle);
+        }
+    }
+
+    private void HandleGrabHitState()
+    {
+        grabSequence.Frame++;
+
+        // TODO: read per-frame attacker offset from grab data and apply to Position
+        // TODO: read per-frame defender offset from grab data and set grabPartner.Position
+
+        if (grabSequence.Frame >= grabSequence.Duration)
+            TransitionTo(PlayerState.Idle);
+    }
+
+    private void HandleHitByGrabState()
+    {
+        grabSequence.Frame++;
+
+        // Position is driven entirely by the grabbing player in HandleGrabHitState.
+        // TODO: apply grab damage at the appropriate frame
+
+        if (grabSequence.Frame >= grabSequence.Duration)
+            TransitionTo(PlayerState.Knockdown);
+    }
+
     public bool CanCancelInto(MoveType move)
     {
         if (!IsAttacking()) return true;
-        if (currentAttack == null || !currentAttack.HitLanded) return false;
-        if (currentAttack.Data.CancellableInto == null) return false;
+        if (currentMove == null || !currentMove.HitLanded) return false;
+        if (currentMove.Data is not AttackData attackData) return false;
+        if (attackData.CancellableInto == null) return false;
 
-        foreach (var type in currentAttack.Data.CancellableInto)
+        foreach (var type in attackData.CancellableInto)
             if (type == move) return true;
 
         return false;
@@ -750,13 +867,13 @@ public partial class Player : Node3D
     private void HandleStandAttackingState()
     {
         Decelerate();
-        currentAttack.Frame++;
+        currentMove.Frame++;
 
-        int startupEnd  = currentAttack.Data.Startup;
-        int activeEnd   = startupEnd + currentAttack.Data.Active;
-        int recoveryEnd = activeEnd  + currentAttack.Data.Recovery;
+        int startupEnd  = currentMove.Data.Startup;
+        int activeEnd   = startupEnd + currentMove.Data.Active;
+        int recoveryEnd = activeEnd  + currentMove.Data.Recovery;
 
-        if (currentAttack.HitLanded)
+        if (currentMove.HitLanded)
         {
             Move cancel = CheckMoveList();
             if (cancel != null) { cancel.Execute(); return; }
@@ -764,21 +881,21 @@ public partial class Player : Node3D
             // We also wanna check if we can cancel into some other stuff, like jumping
             else if(CanCancelInto(MoveType.Jump) && inputBuffer.WasJustPressed(PlayerConstants.BufferWindow, f => f.Jump) != null)
             {
-                JumpType jumpType = currentAttack.Blocked ? JumpType.Normal : JumpType.Combo;
+                JumpType jumpType = currentMove.Blocked ? JumpType.Normal : JumpType.Combo;
                 Jump(PlayerConstants.JumpForce, jumpType);
                 TransitionTo(PlayerState.Jumping);
                 return;
             }
         }
-        if (currentAttack.Frame <= startupEnd)
+        if (currentMove.Frame <= startupEnd)
         {
             // startup — not yet active, apply startup velocity
         }
-        else if (currentAttack.Frame <= activeEnd)
+        else if (currentMove.Frame <= activeEnd)
         {
             // active — hitbox is out
         }
-        else if (currentAttack.Frame <= recoveryEnd)
+        else if (currentMove.Frame <= recoveryEnd)
         {
             // recovery — attack is done, waiting to act again
         }
@@ -790,13 +907,13 @@ public partial class Player : Node3D
     private void HandleCrouchAttackingState()
     {
         Decelerate();
-        currentAttack.Frame++;
+        currentMove.Frame++;
 
-        int startupEnd  = currentAttack.Data.Startup;
-        int activeEnd   = startupEnd + currentAttack.Data.Active;
-        int recoveryEnd = activeEnd  + currentAttack.Data.Recovery;
+        int startupEnd  = currentMove.Data.Startup;
+        int activeEnd   = startupEnd + currentMove.Data.Active;
+        int recoveryEnd = activeEnd  + currentMove.Data.Recovery;
 
-        if (currentAttack.HitLanded)
+        if (currentMove.HitLanded)
         {
             Move cancel = CheckMoveList();
             if (cancel != null) { cancel.Execute(); return; }
@@ -805,21 +922,21 @@ public partial class Player : Node3D
             else if(CanCancelInto(MoveType.Jump) && inputBuffer.WasJustPressed(PlayerConstants.BufferWindow, f => f.Jump) != null)
             {
                 // Combo jumps are done by just jumping, no jumpsquat
-                JumpType jumpType = currentAttack.Blocked ? JumpType.Normal : JumpType.Combo;
+                JumpType jumpType = currentMove.Blocked ? JumpType.Normal : JumpType.Combo;
                 Jump(PlayerConstants.JumpForce, jumpType);
                 TransitionTo(PlayerState.Jumping);
                 return;
             }
         }
-        if (currentAttack.Frame <= startupEnd)
+        if (currentMove.Frame <= startupEnd)
         {
             // startup — not yet active, apply startup velocity
         }
-        else if (currentAttack.Frame <= activeEnd)
+        else if (currentMove.Frame <= activeEnd)
         {
             // active — hitbox is out
         }
-        else if (currentAttack.Frame <= recoveryEnd)
+        else if (currentMove.Frame <= recoveryEnd)
         {
             // recovery — attack is done, waiting to act again
         }
@@ -830,13 +947,13 @@ public partial class Player : Node3D
     }
     private void HandleAirAttackingState()
     {
-        currentAttack.Frame++;
+        currentMove.Frame++;
 
-        int startupEnd  = currentAttack.Data.Startup;
-        int activeEnd   = startupEnd + currentAttack.Data.Active;
-        int recoveryEnd = activeEnd  + currentAttack.Data.Recovery;
+        int startupEnd  = currentMove.Data.Startup;
+        int activeEnd   = startupEnd + currentMove.Data.Active;
+        int recoveryEnd = activeEnd  + currentMove.Data.Recovery;
 
-        if (currentAttack.HitLanded)
+        if (currentMove.HitLanded)
         {
             Move cancel = CheckMoveList();
             if (cancel != null) { cancel.Execute(); return; }
@@ -844,7 +961,7 @@ public partial class Player : Node3D
             // We also wanna check if we can cancel into some other stuff, like jumping
             else if (CanCancelInto(MoveType.Jump) && inputBuffer.WasJustPressed(PlayerConstants.BufferWindow, f => f.Jump) != null && jump.HasDoubleJump)
             {
-                JumpType jumpType = currentAttack.Blocked ? JumpType.Normal : JumpType.Combo;
+                JumpType jumpType = currentMove.Blocked ? JumpType.Normal : JumpType.Combo;
                 Jump(PlayerConstants.DoubleJumpForce, jumpType);
                 jump.HasDoubleJump = false;
                 updateFacing(true); 
@@ -858,21 +975,21 @@ public partial class Player : Node3D
                     : (GetFacing() == FacingDirection.Right ? -1 : 1);
                 jump.HasAirdash = false;
                 jump.AirdashFrame = 0;
-                jump.CurrentJumpType = currentAttack.Blocked ? JumpType.Normal : JumpType.Combo; // To use combo gravity, we need to set the jump type here.
+                jump.CurrentJumpType = currentMove.Blocked ? JumpType.Normal : JumpType.Combo;
                 updateFacing(true); 
                 TransitionTo(PlayerState.Airdashing);
                 return;
             }
         }
-        if (currentAttack.Frame <= startupEnd)
+        if (currentMove.Frame <= startupEnd)
         {
             // startup — not yet active, apply startup velocity
         }
-        else if (currentAttack.Frame <= activeEnd)
+        else if (currentMove.Frame <= activeEnd)
         {
             // active — hitbox is out
         }
-        else if (currentAttack.Frame <= recoveryEnd)
+        else if (currentMove.Frame <= recoveryEnd)
         {
             // recovery — attack is done, waiting to act again
         }
@@ -1146,8 +1263,15 @@ public partial class Player : Node3D
             jump.AirdashFrame = -1;
         if (IsAttacking()){
             currentBufferWindow = PlayerConstants.BufferWindow;
-            currentAttack = null;
+            currentMove = null;
         }
+        if (currentState == PlayerState.GrabOccurring)
+        {
+            currentBufferWindow = PlayerConstants.BufferWindow;
+            currentMove = null;
+        }
+        if (currentState == PlayerState.GrabHit || currentState == PlayerState.HitByGrab)
+            grabPartner = null;
 
         // reset state-specific that we are moving into
         if (newState == PlayerState.JumpSquat)
@@ -1164,6 +1288,10 @@ public partial class Player : Node3D
         if (newState == PlayerState.AirAttacking || newState == PlayerState.StandAttacking || newState == PlayerState.CrouchAttacking){
             currentBufferWindow = PlayerConstants.CancelBufferWindow;
         }
+        if (newState == PlayerState.GrabOccurring)
+            currentBufferWindow = PlayerConstants.CancelBufferWindow;
+        if (newState == PlayerState.GrabHit || newState == PlayerState.HitByGrab)
+            grabSequence.Frame = 0;
         if (newState == PlayerState.Hitstun || newState == PlayerState.AirHitstun)
             hitReaction.Frame = 0;
         if (newState == PlayerState.Knockdown)
