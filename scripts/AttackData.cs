@@ -1,7 +1,6 @@
 using System.Collections.Generic;
-using System.Numerics;
 
-public enum MoveType { Light, Medium, Heavy, CrouchLight, CrouchMedium, CrouchHeavy, Jump, Dash }
+public enum MoveType { Light, Medium, Heavy, CrouchLight, CrouchMedium, CrouchHeavy, Jump, Dash, Grab }
 
 // Base class for all move data. Contains the frame structure and hitbox information
 // shared by every move type.
@@ -38,13 +37,19 @@ public class AttackData : MoveData
     public List<MoveType> CancellableInto;
 }
 
-// Data for a grab move.
+// Data for a grab move. Bypasses blocking and hands control of the defender to the attacker.
+// The attacker scripts the grab in HandleGrabHitState using the Player movement API
+// (SetVelocity, AddVelocity, SnapToPosition) on their grabPartner.
 public class GrabData : MoveData
 {
-    public int GrabSequenceDuration; // total frames of the whole animation
+    public int GrabSequenceDuration; // total frames before the attacker returns to Idle
 
-    // Positional offsets for both the attacker and the defender per frame
-    // These offsets are "how much do i move on frame x" rather than "where am i on frame x"
-    public List<Vector3> AttackerOffsetsPerFrame;
-    public List<Vector3> DefenderOffsetsPerFrame;
+    // Where the defender snaps the moment the grab connects,
+    // as an offset from the attacker's position. X is in the attacker's forward direction.
+    public float DefenderSnapOffsetX;
+    public float DefenderSnapOffsetY;
+
+    // If true, the attacker turns around before the defender snaps into position,
+    // placing the defender behind the attacker (a backthrow).
+    public bool IsBackThrow;
 }

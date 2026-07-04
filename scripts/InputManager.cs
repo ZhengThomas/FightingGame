@@ -14,6 +14,7 @@ public struct InputFrame
     public bool HeavyAttack;
     public bool Dash;
     // Inputs during hitpause are recorded but don't decrement the input buffer window
+    public bool Grab;
     public bool isDuringHitpause;
 }
 
@@ -21,6 +22,7 @@ public struct InputBindings
 {
     public Key Left, Right, Up, Down;
     public Key LightAttack, MediumAttack, HeavyAttack, Dash;
+    public Key Grab;
 }
 
 // Facing-relative directional zones. All motion inputs are defined in these terms
@@ -323,14 +325,28 @@ public partial class InputManager : Node
 
     static readonly InputBindings P1Bindings = new InputBindings
     {
-        Left  = Key.Left,  Right = Key.Right, Up = Key.Up, Down = Key.Down,
-        LightAttack = Key.Z, MediumAttack = Key.X, HeavyAttack = Key.C, Dash = Key.Shift,
+        Left = Key.Left,
+        Right = Key.Right,
+        Up = Key.Up,
+        Down = Key.Down,
+        LightAttack = Key.Z,
+        MediumAttack = Key.X,
+        HeavyAttack = Key.C,
+        Dash = Key.Shift,
+        Grab = Key.V,
     };
 
     static readonly InputBindings P2Bindings = new InputBindings
     {
-        Left  = Key.A, Right = Key.D, Up = Key.W, Down = Key.S,
-        LightAttack = Key.U, MediumAttack = Key.I, HeavyAttack = Key.O, Dash = Key.P,
+        Left = Key.A,
+        Right = Key.D,
+        Up = Key.W,
+        Down = Key.S,
+        LightAttack = Key.U,
+        MediumAttack = Key.I,
+        HeavyAttack = Key.O,
+        Dash = Key.P,
+        Grab = Key.L,
     };
 
     DebugManager debug;
@@ -378,6 +394,7 @@ public partial class InputManager : Node
             MediumAttack = Input.IsKeyPressed(bindings.MediumAttack),
             HeavyAttack  = Input.IsKeyPressed(bindings.HeavyAttack),
             Dash         = Input.IsKeyPressed(bindings.Dash),
+            Grab         = Input.IsKeyPressed(bindings.Grab),
             isDuringHitpause = match.IsInHitPause,
         };
     }

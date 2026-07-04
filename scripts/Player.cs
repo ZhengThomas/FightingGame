@@ -36,7 +36,7 @@ public struct JumpState
 public static class PlayerConstants
 {
     public const float Speed = 2f;
-    public const float DashSpeed = 5f;
+    public const float DashSpeed = 8f;
     public const float WalkJumpSpeed = 2.3f;
     public const float DashJumpSpeed = 4.5f;
     public const float DecelerationSpeed = 0.5f;
@@ -57,7 +57,7 @@ public static class PlayerConstants
     public const float MinAirKnockbackSpeed = 1f;
     public const float JumpForce = 15f;
     public const float DoubleJumpForce = 11f;
-    public const float FloorY = 0.0f;
+    public const float FloorY = -0.8f;
     public const int JumpSquatDuration = 4;
     public const int LandingDuration = 3;
     public const int BufferWindow = 6;
@@ -65,11 +65,11 @@ public static class PlayerConstants
     public const int DashInputLeniency = 10; // time between two button presses for a dash
     public const float MaxPushboxCorrectionPerFrame = 0.2f;
     public const int BackDashStartDuration = 3;
-    public const int BackDashRecoverDuration = 6;
+    public const int BackDashRecoverDuration = 13;
     public const int BackDashDuration = 5;
-    public const float BackDashSpeed = 8f;
+    public const float BackDashSpeed = 7f;
     public const int FramesUntilActionableAfterJump = 7; // it is very important this is greater than the buffer window.
-    public const float AirDashSpeed = 8f;
+    public const float AirDashSpeed = 7f;
     public const int AirDashStartup = 3;
     public const int AirDashDuration = 7;
     public const float MaxPlayerSeparation = 6f;     // max distance between the two players
@@ -171,6 +171,7 @@ public struct HitReactionState
     public float GravityMultiplier;
     public float hitstunMultiplier;
     public float damageMultiplier;
+    public bool HardKnockdown;
 }
 
 public struct BlockReactionState
@@ -203,6 +204,9 @@ public class Move
 
 public partial class Player : Node3D
 {
+    // Emitted at the end of every simulation tick. Used as the animation clock.
+    [Signal] public delegate void TickedEventHandler();
+
     [Export] public bool ShowDebug = true;
     [Export] public int PlayerNumber = 1;
     InputFrame[] inputBuffer;
@@ -220,6 +224,7 @@ public partial class Player : Node3D
     GrabSequenceState grabSequence;
     Player grabPartner = null; // the other player during GrabHit / HitByGrab
     MatchManager Match;
+    public bool SuppressGravity = false;
 
     List<Move> moveList;
     public Box Pushbox = new Box { X = 0, Y = 0, Width = 0.6f, Height = 1.3f };
@@ -232,7 +237,13 @@ public partial class Player : Node3D
     int hitHistoryIndex = 0;
     FacingDirection lastFacing;
     int currentBufferWindow = PlayerConstants.BufferWindow; // depends on if were cancelling or not, our current state
-    
+
+    // Per-character tunable stats. Lazily built from CreateStats() so subclasses can supply
+    // their own values without depending on _Ready ordering. Override CreateStats() to change them.
+    private CharacterStats? cachedStats;
+    protected CharacterStats Stats => cachedStats ??= CreateStats();
+    protected virtual CharacterStats CreateStats() => CharacterStats.Default;
+
     public override void _Ready()
     {
         Match = GetNode<MatchManager>("/root/MatchManager");
@@ -242,7 +253,7 @@ public partial class Player : Node3D
         InitializeMoveList();
     }
 
-    private void InitializeMoveList()
+    protected virtual void InitializeMoveList()
     {
         moveList = new List<Move>
         {
@@ -300,6 +311,18 @@ public partial class Player : Node3D
                 Condition = (input) => input.WasJustPressed(currentBufferWindow, f => f.HeavyAttack, null, [f => f.Down]) != null && CanCancelInto(MoveType.Heavy),
                 Execute = () => StartMove(Moveset.StandingHeavy, PlayerState.StandAttacking),
             },
+            new Move
+            {
+                Name = "BackThrow",
+                Condition = (input) => input.WasJustPressed(currentBufferWindow, f => f.Grab, [f => {return GetFacing() == FacingDirection.Right ? f.Left : f.Right;}]) != null && CanCancelInto(MoveType.Grab) && CanUseGrab(),
+                Execute = () => StartMove(Moveset.BackGrab, PlayerState.GrabOccurring),
+            },
+            new Move
+            {
+                Name = "FowardThrow",
+                Condition = (input) => input.WasJustPressed(currentBufferWindow, f => f.Grab) != null && CanCancelInto(MoveType.Grab) && CanUseGrab(),
+                Execute = () => StartMove(Moveset.FowardGrab, PlayerState.GrabOccurring),
+            },
         };
     }
 
@@ -320,7 +343,7 @@ public partial class Player : Node3D
         return false;
     }
 
-    public bool TakeHit(AttackData data, int attackId, int direction, Player attacker)
+    public virtual bool TakeHit(AttackData data, int attackId, int direction, Player attacker)
     {
         hitHistory[hitHistoryIndex] = attackId;
         hitHistoryIndex = (hitHistoryIndex + 1) % hitHistory.Length;
@@ -361,7 +384,7 @@ public partial class Player : Node3D
         return false;
     }
 
-    public void BlockAttack(AttackData data, int direction)
+    public virtual void BlockAttack(AttackData data, int direction)
     {
         blockReaction.Duration = data.BlockStun > 0 ? data.BlockStun : 15;
         physics.VelocityX = data.PushbackOnBlock == 0 ? data.Pushback : data.PushbackOnBlock;
@@ -385,7 +408,7 @@ public partial class Player : Node3D
         }
     }
 
-    private void StartMove(MoveData moveData, PlayerState attackingState)
+    protected virtual void StartMove(MoveData moveData, PlayerState attackingState)
     {
         TransitionTo(attackingState);
         // ID is derived from frame count and player number, like hashing but lazy
@@ -431,9 +454,42 @@ public partial class Player : Node3D
         return currentState == PlayerState.GrabOccurring;
     }
 
+    public bool CanUseGrab()
+    {
+        return currentState == PlayerState.Idle
+            || currentState == PlayerState.Walking
+            || currentState == PlayerState.Crouching
+            || currentState == PlayerState.GroundDashing;
+    }
+
     public bool IsInGrabSequence()
     {
         return currentState == PlayerState.GrabHit || currentState == PlayerState.HitByGrab;
+    }
+
+    // Movement API used by the attacker to drive the defender during a grab sequence.
+    public void SetVelocity(float x, float y)
+    {
+        physics.VelocityX = x;
+        physics.VelocityY = y;
+    }
+
+    public void AddVelocity(float x, float y)
+    {
+        physics.VelocityX += x;
+        physics.VelocityY += y;
+    }
+
+    public void SnapToPosition(Vector3 position)
+    {
+        Position = position;
+        physics.VelocityX = 0;
+        physics.VelocityY = 0;
+    }
+
+    public void FlipFacing()
+    {
+        lastFacing = lastFacing == FacingDirection.Right ? FacingDirection.Left : FacingDirection.Right;
     }
 
     // Called by MatchManager when a grab hitbox connects.
@@ -442,11 +498,22 @@ public partial class Player : Node3D
     {
         grabPartner = defender;
         grabSequence.Duration = grabData.GrabSequenceDuration;
+
+        if (grabData.IsBackThrow)
+            FlipFacing();
+
+        // Snap the defender to the inital grab position.
+        int facingMult = GetFacing() == FacingDirection.Right ? 1 : -1;
+        defender.SnapToPosition(new Vector3(
+            Position.X + grabData.DefenderSnapOffsetX * facingMult,
+            Position.Y + grabData.DefenderSnapOffsetY,
+            Position.Z
+        ));
         TransitionTo(PlayerState.GrabHit);
     }
 
     // Called by MatchManager when this player is caught by a grab.
-    // Sets this player up as the defender for the grab cinematic.
+    // Snaps the defender into position and hands control to the attacker.
     public void GetGrabbed(GrabData grabData, int attackId, Player attacker)
     {
         hitHistory[hitHistoryIndex] = attackId;
@@ -454,6 +521,7 @@ public partial class Player : Node3D
 
         grabPartner = attacker;
         grabSequence.Duration = grabData.GrabSequenceDuration;
+
         TransitionTo(PlayerState.HitByGrab);
     }
 
@@ -500,7 +568,7 @@ public partial class Player : Node3D
     }
 
     // Returns true if the player's current blocking stance covers the attack's type
-    private bool IsHoldingHighLowForBlock(AttackData data)
+    protected virtual bool IsHoldingHighLowForBlock(AttackData data)
     {
         if (IsAirborneState(currentState)) return true; // airblocks always work
 
@@ -519,7 +587,7 @@ public partial class Player : Node3D
     {
         return currentMove?.GetCurrentHitboxes() ?? emptyBoxList;
     }
-    public List<Box> GetCurrentHurtboxes()
+    public virtual List<Box> GetCurrentHurtboxes()
     {
         // Were immortal if were in the middle of waking up
         if (currentState == PlayerState.Wakeup)
@@ -542,7 +610,7 @@ public partial class Player : Node3D
         // Otherwise, its based on our current state, crouching/idle/jumping/etc.
         return GetDefaultHurtbox();
     }
-    private List<Box> GetDefaultHurtbox()
+    protected virtual List<Box> GetDefaultHurtbox()
     {
         if (currentState == PlayerState.Crouching || currentState == PlayerState.CrouchAttacking || currentState == PlayerState.CrouchBlockstun)
             return CrouchingHurtbox;
@@ -551,7 +619,7 @@ public partial class Player : Node3D
         return StandingHurtbox;
     }
 
-    public void updateFacing(bool forceOverride = false)
+    public virtual void updateFacing(bool forceOverride = false)
     {   
         // Cant turn around in certain states
         if ((currentState == PlayerState.GroundDashing ||
@@ -581,9 +649,9 @@ public partial class Player : Node3D
     }
 
     public bool InGrabbableState() {
-        return currentState != PlayerState.JumpSquat ||
-            !IsAirborneState(currentState) ||
-            !IsHurt() ||
+        return currentState != PlayerState.JumpSquat &&
+            !IsAirborneState(currentState) &&
+            !IsHurt() &&
             !IsBlockingState();
     }
 
@@ -677,35 +745,40 @@ public partial class Player : Node3D
         {
             GD.Print("DownUp");
         }
+
+        // Fired once per simulation tick. The animator listens to this to step animations
+        // in lockstep with the game (so they freeze when the game is paused / in hit pause).
+        EmitSignal(SignalName.Ticked);
     }
 
-    private void ApplyGravity()
+    protected virtual void ApplyGravity()
     {
         if (physics.IsOnFloor) return;
         if (currentState == PlayerState.Landing) return;
         if (currentState == PlayerState.Airdashing) return;
+        if (SuppressGravity) return;
 
         bool hurt = IsHurt();
-        float floating = hurt ? PlayerConstants.HitstunFloatingGravity : PlayerConstants.FloatingGravity;
-        float rising   = hurt ? PlayerConstants.HitstunRisingGravity   : PlayerConstants.RisingGravity;
-        float falling  = hurt ? PlayerConstants.HitstunFallingGravity  : PlayerConstants.FallingGravity;
+        float floating = hurt ? Stats.HitstunFloatingGravity : Stats.FloatingGravity;
+        float rising   = hurt ? Stats.HitstunRisingGravity   : Stats.RisingGravity;
+        float falling  = hurt ? Stats.HitstunFallingGravity  : Stats.FallingGravity;
 
         // Jumps are floatier if you are doing an air combo
         if (!hurt && jump.CurrentJumpType == JumpType.Combo)
-            floating = PlayerConstants.ComboFloatingGravity;
+            floating = Stats.ComboFloatingGravity;
 
-        if (Math.Abs(physics.VelocityY) <= PlayerConstants.FloatingGravityThreshold)
+        if (Math.Abs(physics.VelocityY) <= Stats.FloatingGravityThreshold)
             physics.VelocityY -= floating;
         else if (physics.VelocityY >= 0)
             physics.VelocityY -= rising;
         else
             physics.VelocityY -= falling;
 
-        if (physics.VelocityY < PlayerConstants.MaxFallSpeed)
-            physics.VelocityY = PlayerConstants.MaxFallSpeed;
+        if (physics.VelocityY < Stats.MaxFallSpeed)
+            physics.VelocityY = Stats.MaxFallSpeed;
     }
 
-    private void ProcessCurrentState()
+    protected virtual void ProcessCurrentState()
     {
         switch (currentState)
         {
@@ -778,22 +851,22 @@ public partial class Player : Node3D
         }
     }
 
-    private void HandleBlockstunState()
+    protected virtual void HandleBlockstunState()
     {
         blockReaction.Frame++;
-        Decelerate(PlayerConstants.GroundedHitDecelerationSpeed);
+        Decelerate(Stats.GroundedHitDecelerationSpeed);
         if (blockReaction.Frame >= blockReaction.Duration)
             TransitionTo(PlayerState.Idle);
     }
 
-    private void HandleCrouchBlockstunState()
+    protected virtual void HandleCrouchBlockstunState()
     {
         blockReaction.Frame++;
-        Decelerate(PlayerConstants.GroundedHitDecelerationSpeed);
+        Decelerate(Stats.GroundedHitDecelerationSpeed);
         if (blockReaction.Frame >= blockReaction.Duration)
             TransitionTo(PlayerState.Crouching);
     }
-    private void HandleAirBlockstunState()
+    protected virtual void HandleAirBlockstunState()
     {
         blockReaction.Frame++;
         AirHitDecelerate();
@@ -801,7 +874,7 @@ public partial class Player : Node3D
             TransitionTo(PlayerState.Jumping);
     }
 
-    private void HandleGrabOccurringState()
+    protected virtual void HandleGrabOccurringState()
     {
         Decelerate();
         currentMove.Frame++;
@@ -810,7 +883,6 @@ public partial class Player : Node3D
         int activeEnd   = startupEnd + currentMove.Data.Active;
         int recoveryEnd = activeEnd  + currentMove.Data.Recovery;
 
-        // On grab connect, MatchManager calls EnterGrabHit directly — no HitLanded check needed here.
         if (currentMove.Frame <= startupEnd)
         {
             // startup — not yet active
@@ -829,26 +901,40 @@ public partial class Player : Node3D
         }
     }
 
-    private void HandleGrabHitState()
+    protected virtual void HandleGrabHitState()
     {
         grabSequence.Frame++;
+        Decelerate();
+        if (grabSequence.Frame < 20)
+        {
+            grabPartner.Decelerate();
+        }
 
-        // TODO: read per-frame attacker offset from grab data and apply to Position
-        // TODO: read per-frame defender offset from grab data and set grabPartner.Position
+        // Drive the grab here using grabPartner.SetVelocity / AddVelocity / SnapToPosition.
+        if (grabSequence.Frame == 20)
+        {
+            grabPartner.SetVelocity(3f * (int)GetFacing(), 9f);
+            grabPartner.hitReaction.Duration = 100; // They get "hit" by the grab and are sent flying ish
+            // this will be custom for each character, but rn im lazy and this is simple and sounds right
+            grabPartner.TransitionTo(PlayerState.AirHitstun);
+        }
 
-        if (grabSequence.Frame >= grabSequence.Duration)
+        if (grabSequence.Frame >= grabSequence.Duration) {
             TransitionTo(PlayerState.Idle);
+            return;
+        }
     }
 
-    private void HandleHitByGrabState()
+    protected virtual void HandleHitByGrabState()
     {
         grabSequence.Frame++;
 
-        // Position is driven entirely by the grabbing player in HandleGrabHitState.
-        // TODO: apply grab damage at the appropriate frame
+        // The attacker drives this player's position and velocity via the Player movement API.
+        // The attacker is responsible for launching us out of this state at the right time.
+        // As well as putting us into the right state afterwards
 
-        if (grabSequence.Frame >= grabSequence.Duration)
-            TransitionTo(PlayerState.Knockdown);
+        // In other words, this handler does nothing, maybe idk about the future but rn its
+        // just an empty state that lets us know were not responsible for anything
     }
 
     public bool CanCancelInto(MoveType move)
@@ -864,7 +950,7 @@ public partial class Player : Node3D
         return false;
     }
 
-    private void HandleStandAttackingState()
+    protected virtual void HandleStandAttackingState()
     {
         Decelerate();
         currentMove.Frame++;
@@ -882,7 +968,7 @@ public partial class Player : Node3D
             else if(CanCancelInto(MoveType.Jump) && inputBuffer.WasJustPressed(PlayerConstants.BufferWindow, f => f.Jump) != null)
             {
                 JumpType jumpType = currentMove.Blocked ? JumpType.Normal : JumpType.Combo;
-                Jump(PlayerConstants.JumpForce, jumpType);
+                Jump(Stats.JumpForce, jumpType);
                 TransitionTo(PlayerState.Jumping);
                 return;
             }
@@ -904,7 +990,7 @@ public partial class Player : Node3D
             TransitionTo(physics.IsOnFloor ? PlayerState.Idle : PlayerState.Jumping);
         }
     }
-    private void HandleCrouchAttackingState()
+    protected virtual void HandleCrouchAttackingState()
     {
         Decelerate();
         currentMove.Frame++;
@@ -923,7 +1009,7 @@ public partial class Player : Node3D
             {
                 // Combo jumps are done by just jumping, no jumpsquat
                 JumpType jumpType = currentMove.Blocked ? JumpType.Normal : JumpType.Combo;
-                Jump(PlayerConstants.JumpForce, jumpType);
+                Jump(Stats.JumpForce, jumpType);
                 TransitionTo(PlayerState.Jumping);
                 return;
             }
@@ -945,7 +1031,7 @@ public partial class Player : Node3D
             TransitionTo(PlayerState.Crouching);
         }
     }
-    private void HandleAirAttackingState()
+    protected virtual void HandleAirAttackingState()
     {
         currentMove.Frame++;
 
@@ -962,7 +1048,7 @@ public partial class Player : Node3D
             else if (CanCancelInto(MoveType.Jump) && inputBuffer.WasJustPressed(PlayerConstants.BufferWindow, f => f.Jump) != null && jump.HasDoubleJump)
             {
                 JumpType jumpType = currentMove.Blocked ? JumpType.Normal : JumpType.Combo;
-                Jump(PlayerConstants.DoubleJumpForce, jumpType);
+                Jump(Stats.DoubleJumpForce, jumpType);
                 jump.HasDoubleJump = false;
                 updateFacing(true); 
                 TransitionTo(PlayerState.Jumping);
@@ -998,15 +1084,15 @@ public partial class Player : Node3D
             TransitionTo(physics.IsOnFloor ? PlayerState.Idle : PlayerState.Jumping);
         }
     }
-    private void HandleHitstunState()
+    protected virtual void HandleHitstunState()
     {
         hitReaction.Frame++;
-        Decelerate(PlayerConstants.GroundedHitDecelerationSpeed);
+        Decelerate(Stats.GroundedHitDecelerationSpeed);
         if (hitReaction.Frame >= hitReaction.Duration)
             TransitionTo(PlayerState.Idle);
     }
 
-    private void HandleAirHitstunState()
+    protected virtual void HandleAirHitstunState()
     {
         hitReaction.Frame++;
         // Gravity is applied by ApplyGravity; landing is caught by ResolveFloorCollision -> Knockdown
@@ -1016,7 +1102,7 @@ public partial class Player : Node3D
             TransitionTo(PlayerState.Jumping);
     }
 
-    private void HandleKnockdownState()
+    protected virtual void HandleKnockdownState()
     {
         physics.VelocityX = 0;
         physics.VelocityY = 0;
@@ -1026,14 +1112,14 @@ public partial class Player : Node3D
             TransitionTo(PlayerState.Wakeup);
     }
 
-    private void HandleWakeupState()
+    protected virtual void HandleWakeupState()
     {
         hitReaction.Frame++;
         // TODO: wakeup is typically invincible for some frames
         if (hitReaction.Frame >= hitReaction.Duration)
             TransitionTo(PlayerState.Idle);
     }
-    private void HandleCrouchingState()
+    protected virtual void HandleCrouchingState()
     {
         Decelerate();
 
@@ -1052,12 +1138,12 @@ public partial class Player : Node3D
             TransitionTo(PlayerState.Idle);
     }
 
-    private void HandleAirdashState()
+    protected virtual void HandleAirdashState()
     {
         jump.AirdashFrame++;
         HandleAirdashMovement();
 
-        int totalAirdashDuration = PlayerConstants.AirDashDuration + PlayerConstants.AirDashStartup;
+        int totalAirdashDuration = Stats.AirDashDuration + Stats.AirDashStartup;
         if(jump.AirdashFrame > totalAirdashDuration)
         {
             jump.AirdashFrame = -1;
@@ -1078,7 +1164,7 @@ public partial class Player : Node3D
         return null;
     }
 
-    private void HandleIdleState()
+    protected virtual void HandleIdleState()
     {
         HandleGroundedMovement();
         Move usedMove = CheckMoveList();
@@ -1108,7 +1194,7 @@ public partial class Player : Node3D
         }
     }
 
-    private void HandleWalkingState()
+    protected virtual void HandleWalkingState()
     {
         HandleGroundedMovement();
         Move usedMove = CheckMoveList();
@@ -1139,7 +1225,7 @@ public partial class Player : Node3D
         }
     }
 
-    private void HandleGroundDashState()
+    protected virtual void HandleGroundDashState()
     {
         bool forwardHeld = GetFacing() == FacingDirection.Right ? inputBuffer[0].Right : inputBuffer[0].Left;
         bool backHeld    = GetFacing() == FacingDirection.Right ? inputBuffer[0].Left  : inputBuffer[0].Right;
@@ -1170,12 +1256,12 @@ public partial class Player : Node3D
             TransitionTo(PlayerState.Walking);
     }
 
-    private void HandleBackDashState()
+    protected virtual void HandleBackDashState()
     {
         backdashInfo.BackDashFrame++;
         HandleBackDashMovement();
 
-        int totalBackdashDuration = PlayerConstants.BackDashDuration + PlayerConstants.BackDashRecoverDuration + PlayerConstants.BackDashStartDuration;
+        int totalBackdashDuration = Stats.BackDashDuration + Stats.BackDashRecoverDuration + Stats.BackDashStartDuration;
         if (backdashInfo.BackDashFrame >= totalBackdashDuration)
         {
             
@@ -1184,19 +1270,19 @@ public partial class Player : Node3D
         }
     }
 
-    private void HandleJumpSquatState()
+    protected virtual void HandleJumpSquatState()
     {
         jump.JumpSquatFrame++;
         Decelerate();
-        if (jump.JumpSquatFrame >= PlayerConstants.JumpSquatDuration)
+        if (jump.JumpSquatFrame >= Stats.JumpSquatDuration)
         {
             // Jumptype already set in the JumpSquat function
-            Jump(PlayerConstants.JumpForce, jump.CurrentJumpType);
+            Jump(Stats.JumpForce, jump.CurrentJumpType);
             TransitionTo(PlayerState.Jumping);
         }
     }
 
-    private void HandleAirborneState()
+    protected virtual void HandleAirborneState()
     {
         HandleAerialMovement();
         jump.FramesSinceLastJump++;
@@ -1207,7 +1293,7 @@ public partial class Player : Node3D
         {
             usedMove.Execute();
         }
-        else if (inputBuffer.WasJustPressed(PlayerConstants.BufferWindow, f => f.Jump) is InputFrame jumpPress && jump.HasDoubleJump && jump.FramesSinceLastJump >= PlayerConstants.FramesUntilActionableAfterJump)
+        else if (inputBuffer.WasJustPressed(PlayerConstants.BufferWindow, f => f.Jump) is InputFrame jumpPress && jump.HasDoubleJump && jump.FramesSinceLastJump >= Stats.FramesUntilActionableAfterJump)
         {
             JumpType jumptype = JumpType.Normal;
             updateFacing(true); 
@@ -1222,10 +1308,10 @@ public partial class Player : Node3D
                 }
             }
 
-            Jump(PlayerConstants.DoubleJumpForce, jumptype);
+            Jump(Stats.DoubleJumpForce, jumptype);
             jump.HasDoubleJump = false;
         }
-        else if ((ForwardDashInputted() || BackDashInputted()) && jump.HasAirdash && jump.FramesSinceLastJump >= PlayerConstants.FramesUntilActionableAfterJump)
+        else if ((ForwardDashInputted() || BackDashInputted()) && jump.HasAirdash && jump.FramesSinceLastJump >= Stats.FramesUntilActionableAfterJump)
         {
             jump.AirDashDirection = ForwardDashInputted() 
                 ? (GetFacing() == FacingDirection.Right ? 1 : -1)
@@ -1238,7 +1324,7 @@ public partial class Player : Node3D
         // landing state transition is handled by the ResolveFloorCollision function
     }
 
-    private void HandleLandingState()
+    protected virtual void HandleLandingState()
     {   
         jump.LandingFrame++;
         physics.VelocityX = 0;
@@ -1250,7 +1336,7 @@ public partial class Player : Node3D
         }
     }
 
-    private void TransitionTo(PlayerState newState)
+    protected virtual void TransitionTo(PlayerState newState)
     {
         // reset state specific stuff that we are moving out of
         if (currentState == PlayerState.JumpSquat)
@@ -1297,12 +1383,12 @@ public partial class Player : Node3D
         if (newState == PlayerState.Knockdown)
         {
             hitReaction.Frame = 0;
-            hitReaction.Duration = PlayerConstants.KnockdownDuration;
+            hitReaction.Duration = Stats.KnockdownDuration;
         }
         if (newState == PlayerState.Wakeup)
         {
             hitReaction.Frame = 0;
-            hitReaction.Duration = PlayerConstants.WakeupDuration;
+            hitReaction.Duration = Stats.WakeupDuration;
         }
         if (newState == PlayerState.Blockstun || newState == PlayerState.CrouchBlockstun || newState == PlayerState.AirBlockstun)
         {
@@ -1312,40 +1398,40 @@ public partial class Player : Node3D
         currentState = newState;
     }
 
-    private void HandleGroundedMovement()
+    protected virtual void HandleGroundedMovement()
     {
         if (inputBuffer[0].Right)
-            physics.VelocityX = PlayerConstants.Speed;
+            physics.VelocityX = Stats.Speed;
         else if (inputBuffer[0].Left) 
-            physics.VelocityX = -PlayerConstants.Speed;
+            physics.VelocityX = -Stats.Speed;
         else
             Decelerate();
     }
 
-    private void HandleGroundedDashMovement()
+    protected virtual void HandleGroundedDashMovement()
     {
         if (inputBuffer[0].Right)
-            physics.VelocityX = GetFacing() == FacingDirection.Right ? PlayerConstants.DashSpeed : -PlayerConstants.DashSpeed;
+            physics.VelocityX = GetFacing() == FacingDirection.Right ? Stats.DashSpeed : -Stats.DashSpeed;
         else if (inputBuffer[0].Left)
-            physics.VelocityX = GetFacing() == FacingDirection.Left ? -PlayerConstants.DashSpeed : PlayerConstants.DashSpeed;
+            physics.VelocityX = GetFacing() == FacingDirection.Left ? -Stats.DashSpeed : Stats.DashSpeed;
         else
             Decelerate();
     }
 
-    private void HandleBackDashMovement()
+    protected virtual void HandleBackDashMovement()
     {   
         
-        if(backdashInfo.BackDashFrame <= PlayerConstants.BackDashStartDuration)
+        if(backdashInfo.BackDashFrame <= Stats.BackDashStartDuration)
         {
             // just started to backdash
             Decelerate();
         }
-        else if(backdashInfo.BackDashFrame <= PlayerConstants.BackDashDuration + PlayerConstants.BackDashStartDuration)
+        else if(backdashInfo.BackDashFrame <= Stats.BackDashDuration + Stats.BackDashStartDuration)
         {
             // actually backdashing
             physics.VelocityX = GetFacing() == FacingDirection.Right 
-                ? -PlayerConstants.BackDashSpeed 
-                : PlayerConstants.BackDashSpeed;
+                ? -Stats.BackDashSpeed 
+                : Stats.BackDashSpeed;
         }
         else
         {
@@ -1354,29 +1440,29 @@ public partial class Player : Node3D
         }
     }
 
-    private void HandleAirdashMovement()
+    protected virtual void HandleAirdashMovement()
     {
-        if(jump.AirdashFrame <= PlayerConstants.AirDashStartup)
+        if(jump.AirdashFrame <= Stats.AirDashStartup)
         {
             physics.VelocityX = 0;
         }
         else
         {
-            physics.VelocityX = PlayerConstants.AirDashSpeed * jump.AirDashDirection;
+            physics.VelocityX = Stats.AirDashSpeed * jump.AirDashDirection;
         }
         physics.VelocityY = 0;
     }
 
-    private void HandleAerialMovement()
+    protected virtual void HandleAerialMovement()
     {
         // Does nothing 
     }
 
-    private void Decelerate(float? speed = null)
+    protected virtual void Decelerate(float? speed = null)
     {
-        float deceleration = speed ?? (Math.Abs(physics.VelocityX) > PlayerConstants.StrongDecelerationThreshold
-            ? PlayerConstants.StrongDecelerationSpeed
-            : PlayerConstants.DecelerationSpeed);
+        float deceleration = speed ?? (Math.Abs(physics.VelocityX) > Stats.StrongDecelerationThreshold
+            ? Stats.StrongDecelerationSpeed
+            : Stats.DecelerationSpeed);
 
         if (physics.VelocityX > 0)
             physics.VelocityX = Math.Max(0, physics.VelocityX - deceleration);
@@ -1384,28 +1470,28 @@ public partial class Player : Node3D
             physics.VelocityX = Math.Min(0, physics.VelocityX + deceleration);
     }
 
-    private void AirHitDecelerate()
+    protected virtual void AirHitDecelerate()
     {
         // Air knockback is a little weird
         // At the top of the arc, we decelerate
         // We cannot decelerate more than a certain amount
         // Once we leave the top of the arc, we always go to some minimum speed
-        if (Math.Abs(physics.VelocityY) <= PlayerConstants.FloatingGravityThreshold)
+        if (Math.Abs(physics.VelocityY) <= Stats.FloatingGravityThreshold)
         {
-            float deceleration = PlayerConstants.AirHitDecelerationSpeed;
+            float deceleration = Stats.AirHitDecelerationSpeed;
             if (physics.VelocityX > 0)
-                physics.VelocityX = Math.Max(PlayerConstants.AirHitMinimumSpeed, physics.VelocityX - deceleration);
+                physics.VelocityX = Math.Max(Stats.AirHitMinimumSpeed, physics.VelocityX - deceleration);
             else
-                physics.VelocityX = Math.Min(-PlayerConstants.AirHitMinimumSpeed, physics.VelocityX + deceleration);
+                physics.VelocityX = Math.Min(-Stats.AirHitMinimumSpeed, physics.VelocityX + deceleration);
         }
-        else if (physics.VelocityY < -PlayerConstants.FloatingGravityThreshold)
+        else if (physics.VelocityY < -Stats.FloatingGravityThreshold)
         {
             // Left the top of the arc, go to the minimum speed
-            physics.VelocityX = Math.Sign(physics.VelocityX) * PlayerConstants.AirHitMinimumSpeed;
+            physics.VelocityX = Math.Sign(physics.VelocityX) * Stats.AirHitMinimumSpeed;
         }
     }
 
-    private void SetupJumpDirection()
+    protected virtual void SetupJumpDirection()
     {
         InputFrame? frame = inputBuffer.WasJustPressed(PlayerConstants.BufferWindow, f => f.Jump);
         if (frame is { Right: true }) jump.jumpDirection = 1;
@@ -1413,7 +1499,7 @@ public partial class Player : Node3D
         else jump.jumpDirection = 0;
     }
 
-    private void JumpSquat()
+    protected virtual void JumpSquat()
     {        
         SetupJumpDirection();
         if(currentState == PlayerState.GroundDashing){
@@ -1425,7 +1511,7 @@ public partial class Player : Node3D
         }
     }
 
-    private void Jump(float jumpForce, JumpType jumpType)
+    protected virtual void Jump(float jumpForce, JumpType jumpType)
     {
         SetupJumpDirection();
         jump.CurrentJumpType = jumpType;
@@ -1433,13 +1519,13 @@ public partial class Player : Node3D
         switch(jump.CurrentJumpType)
         {
             case JumpType.Dash:
-                physics.VelocityX = PlayerConstants.DashJumpSpeed;
+                physics.VelocityX = Stats.DashJumpSpeed;
                 break;
             case JumpType.Normal:
-                physics.VelocityX = PlayerConstants.WalkJumpSpeed;
+                physics.VelocityX = Stats.WalkJumpSpeed;
                 break;
             case JumpType.Combo:
-                physics.VelocityX = PlayerConstants.WalkJumpSpeed;
+                physics.VelocityX = Stats.WalkJumpSpeed;
                 break;
         }
         physics.VelocityX *= jump.jumpDirection;
@@ -1447,7 +1533,7 @@ public partial class Player : Node3D
         jump.FramesSinceLastJump = 0;
     }
 
-    private void ApplyVelocity()
+    protected virtual void ApplyVelocity()
     {
         Position = new Vector3(
             Position.X + physics.VelocityX * PlayerConstants.FixedDelta,
@@ -1456,7 +1542,7 @@ public partial class Player : Node3D
         );
     }
 
-    private void ResolveFloorCollision()
+    protected virtual void ResolveFloorCollision()
     {
         if (Position.Y <= PlayerConstants.FloorY)
         {
@@ -1473,12 +1559,12 @@ public partial class Player : Node3D
                 else if (currentState == PlayerState.AirBlockstun)
                 {
                     TransitionTo(PlayerState.Landing);
-                    jump.LandingDuration = PlayerConstants.AirBlockstunLandingPenalty + PlayerConstants.LandingDuration;
+                    jump.LandingDuration = PlayerConstants.AirBlockstunLandingPenalty + Stats.LandingDuration;
                 }
                 else
                 {
                     TransitionTo(PlayerState.Landing);
-                    jump.LandingDuration = PlayerConstants.LandingDuration;
+                    jump.LandingDuration = Stats.LandingDuration;
                 }
             }
             physics.IsOnFloor = true;

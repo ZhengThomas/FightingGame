@@ -176,6 +176,8 @@ public partial class MatchManager : Node
 		// wall clamping — neither player can go past the stage edges
 		float wall = PlayerConstants.MaxDistanceFromCenter;
 		// yucky bandaid solution but probably wont get fixed cuz i cant think of anything
+		// Theres probably an edge case where both players are in the corner at the same time,
+		// But i dont think it will be a problem
 		bool p1InCorner = Math.Abs(p1xLastFrame) >= wall;
 		bool p2InCorner = Math.Abs(p2xLastFrame) >= wall;
 		float p1Walls = p2InCorner ? wall - 0.1f : wall;
@@ -293,7 +295,7 @@ public partial class MatchManager : Node
 			color = new Color(0.5f, 0, 0.5f); // purple = recovery
 
 		// small box above the player's head
-		Box indicator = new Box { X = 0, Y = 1.3f, Width = 0.4f, Height = 0.2f };
+		Box indicator = new Box { X = 0, Y = 1.0f, Width = 0.4f, Height = 0.2f };
 		DebugDraw.DrawWorldBox(player, indicator, color);
 	}
 
@@ -316,14 +318,15 @@ public partial class MatchManager : Node
 				DebugDraw.DrawWorldBox(Player1, hitbox, new Color(1, 0, 0), Player1.GetFacing() == FacingDirection.Right ? 1f : -1f);
 			DrawAttackStateIndicator(Player1);
 		}
+		
 		if (Player2 != null && Player2.ShowDebug)
 		{
 			DebugDraw.DrawWorldBox(Player2, Player2.Pushbox, new Color(0, 1, 0));
 
 			Color p2HurtboxColor = Player2.IsHurt() ? new Color(1, 0, 0) : new Color(0, 0, 1);
-			if(Player2.IsBlockingState())
+			if (Player2.IsBlockingState())
 				p2HurtboxColor = new Color(1, 1, 0);
-			else if(Player2.IsHurt())
+			else if (Player2.IsHurt())
 				p2HurtboxColor = new Color(1, 0, 0);
 			foreach (Box hurtbox in Player2.GetCurrentHurtboxes())
 				DebugDraw.DrawWorldBox(Player2, hurtbox, p2HurtboxColor);
