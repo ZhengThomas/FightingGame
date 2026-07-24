@@ -11,6 +11,9 @@ public struct PhysicsState
 {
     public float VelocityX;
     public float VelocityY;
+    // Separate from movement/knockback. Set by hit/block pushback; transfers to the
+    // attacker in the corner; cleared on jump/airdash cancels.
+    public float PushbackVelocityX;
     public bool IsOnFloor;
 }
 
@@ -355,15 +358,13 @@ public partial class Player : Node3D
 
         hitReaction.Timer.Duration = data.HitStun > 0 ? data.HitStun : 15;
 
-        // We apply the velocity of the attack to the player
-        physics.VelocityX = data.Pushback * direction;
-
-        // TODO - If were in the corner, apply the velcoity of the attack to the attacker in the opposite direction
+        float pushX = data.Pushback * direction;
+        physics.VelocityX = 0;
+        physics.PushbackVelocityX = pushX;
 
         if (data.LaunchesOpponent || !physics.IsOnFloor)
         {
             TransitionTo(PlayerState.AirHitstun);
-            // If we are gonna be airbourne cuz of the attack, we also apply the y velocity of the attack
             physics.VelocityY = data.LaunchForce;
         }
         else
@@ -377,8 +378,9 @@ public partial class Player : Node3D
     public virtual void BlockAttack(AttackData data, int direction)
     {
         blockReaction.Timer.Duration = data.BlockStun > 0 ? data.BlockStun : 15;
-        physics.VelocityX = data.PushbackOnBlock == 0 ? data.Pushback : data.PushbackOnBlock;
-        physics.VelocityX *= direction;
+        float push = data.PushbackOnBlock == 0 ? data.Pushback : data.PushbackOnBlock;
+        physics.VelocityX = 0;
+        physics.PushbackVelocityX = push * direction;
 
         if(!physics.IsOnFloor)
         {
@@ -462,6 +464,18 @@ public partial class Player : Node3D
             || currentState == PlayerState.AirBlockstun;
     }
 
+    public float PushbackVelocityX => physics.PushbackVelocityX;
+
+    public void AddPushbackVelocity(float x)
+    {
+        physics.PushbackVelocityX += x;
+    }
+
+    public void ClearPushbackVelocity()
+    {
+        physics.PushbackVelocityX = 0;
+    }
+
     public bool IsGrabbing()
     {
         return currentState == PlayerState.GrabOccurring;
@@ -498,6 +512,7 @@ public partial class Player : Node3D
         Position = position;
         physics.VelocityX = 0;
         physics.VelocityY = 0;
+        physics.PushbackVelocityX = 0;
     }
 
     public void FlipFacing()
@@ -643,9 +658,9 @@ public partial class Player : Node3D
             currentState == PlayerState.StandAttacking ||
             currentState == PlayerState.CrouchAttacking ||
             currentState == PlayerState.GrabOccurring ||
-            currentState == PlayerState.GrabHit ||
-            currentState == PlayerState.HitByGrab ||
-            IsHurt()) && !forceOverride)
+            currentState == PlayerState.Knockdown || 
+            currentState == PlayerState.Wakeup)
+            && !forceOverride)
         {
             return;
         }
@@ -728,6 +743,9 @@ public partial class Player : Node3D
         updateFacing();
         ApplyGravity();
         ProcessCurrentState();
+        // Air hit/blockstun owns pushback drag via AirHitDecelerate (arc-based).
+        if (currentState != PlayerState.AirHitstun && currentState != PlayerState.AirBlockstun)
+            DeceleratePushback();
         ApplyVelocity();
         ResolveFloorCollision();
 
@@ -1372,6 +1390,7 @@ public partial class Player : Node3D
         // reset state-specific that we are moving into
         if (newState == PlayerState.JumpSquat)
         {
+            ClearPushbackVelocity();
             jump.FramesSinceLastJump = 0;
             jump.JumpSquatFrame = 0;
         }
@@ -1382,7 +1401,10 @@ public partial class Player : Node3D
         if (newState == PlayerState.Backdashing)
             backdashInfo.BackDashFrame = 0;
         if (newState == PlayerState.Airdashing)
+        {
+            ClearPushbackVelocity();
             jump.AirdashFrame = 0;
+        }
         if (newState == PlayerState.AirAttacking || newState == PlayerState.StandAttacking || newState == PlayerState.CrouchAttacking){
             currentBufferWindow = PlayerConstants.CancelBufferWindow;
         }
@@ -1441,6 +1463,7 @@ public partial class Player : Node3D
 
     protected virtual void HandleAirdashMovement()
     {
+        ClearPushbackVelocity();
         if(jump.AirdashFrame <= Stats.AirDashStartup)
         {
             physics.VelocityX = 0;
@@ -1469,24 +1492,35 @@ public partial class Player : Node3D
             physics.VelocityX = Math.Min(0, physics.VelocityX + deceleration);
     }
 
+    protected virtual void DeceleratePushback()
+    {
+        float deceleration = Stats.GroundedHitDecelerationSpeed;
+        if (physics.PushbackVelocityX > 0)
+            physics.PushbackVelocityX = Math.Max(0, physics.PushbackVelocityX - deceleration);
+        else if (physics.PushbackVelocityX < 0)
+            physics.PushbackVelocityX = Math.Min(0, physics.PushbackVelocityX + deceleration);
+    }
+
     protected virtual void AirHitDecelerate()
     {
-        // Air knockback is a little weird
-        // At the top of the arc, we decelerate
-        // We cannot decelerate more than a certain amount
-        // Once we leave the top of the arc, we always go to some minimum speed
+        // Air hit horizontal lives on PushbackVelocityX. Feel rules:
+        // - rising: keep full pushback (no drag)
+        // - top of arc: decelerate, but not below AirHitMinimumSpeed
+        // - falling: snap to that minimum in the same direction
+        float pb = physics.PushbackVelocityX;
+        if (pb == 0f) return;
+
         if (Math.Abs(physics.VelocityY) <= Stats.FloatingGravityThreshold)
         {
             float deceleration = Stats.AirHitDecelerationSpeed;
-            if (physics.VelocityX > 0)
-                physics.VelocityX = Math.Max(Stats.AirHitMinimumSpeed, physics.VelocityX - deceleration);
+            if (pb > 0)
+                physics.PushbackVelocityX = Math.Max(Stats.AirHitMinimumSpeed, pb - deceleration);
             else
-                physics.VelocityX = Math.Min(-Stats.AirHitMinimumSpeed, physics.VelocityX + deceleration);
+                physics.PushbackVelocityX = Math.Min(-Stats.AirHitMinimumSpeed, pb + deceleration);
         }
         else if (physics.VelocityY < -Stats.FloatingGravityThreshold)
         {
-            // Left the top of the arc, go to the minimum speed
-            physics.VelocityX = Math.Sign(physics.VelocityX) * Stats.AirHitMinimumSpeed;
+            physics.PushbackVelocityX = Math.Sign(pb) * Stats.AirHitMinimumSpeed;
         }
     }
 
@@ -1515,6 +1549,7 @@ public partial class Player : Node3D
 
     protected virtual void Jump(float jumpForce, JumpType jumpType)
     {
+        ClearPushbackVelocity();
         SetupJumpDirection();
         jump.CurrentJumpType = jumpType;
         physics.VelocityY = jumpForce;
@@ -1538,7 +1573,7 @@ public partial class Player : Node3D
     protected virtual void ApplyVelocity()
     {
         Position = new Vector3(
-            Position.X + physics.VelocityX * PlayerConstants.FixedDelta,
+            Position.X + (physics.VelocityX + physics.PushbackVelocityX) * PlayerConstants.FixedDelta,
             Position.Y + physics.VelocityY * PlayerConstants.FixedDelta,
             Position.Z
         );

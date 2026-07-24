@@ -181,7 +181,6 @@ public partial class MatchManager : Node
 			float p2Limit = Mathf.Clamp(p2x, MidpointLastFrame - halfMax, MidpointLastFrame + halfMax);
 			Player1.Position = new Vector3(p1Limit, Player1.Position.Y, Player1.Position.Z);
 			Player2.Position = new Vector3(p2Limit, Player2.Position.Y, Player2.Position.Z);
-			
 		}
 
 		// wall clamping — neither player can go past the stage edges
@@ -197,12 +196,40 @@ public partial class MatchManager : Node
 		Player1.Position = new Vector3(Mathf.Clamp(Player1.Position.X, -p1Walls, p1Walls), Player1.Position.Y, Player1.Position.Z);
 		Player2.Position = new Vector3(Mathf.Clamp(Player2.Position.X, -p2Walls, p2Walls), Player2.Position.Y, Player2.Position.Z);
 	}
+
+	// If a player is against the wall with pushback aimed into it, move that pushback onto the opponent.
+	private void TransferCornerPushback()
+	{
+		if (Player1 == null || Player2 == null) return;
+
+		float wall = PlayerConstants.MaxDistanceFromCenter;
+		const float eps = 0.01f;
+
+		TransferCornerPushbackFor(Player1, Player2, wall, eps);
+		TransferCornerPushbackFor(Player2, Player1, wall, eps);
+	}
+
+	private static void TransferCornerPushbackFor(Player defender, Player attacker, float wall, float eps)
+	{
+		float pb = defender.PushbackVelocityX;
+		if (pb == 0f) return;
+
+		bool intoRightWall = defender.Position.X >= wall - eps && pb > 0f;
+		bool intoLeftWall  = defender.Position.X <= -wall + eps && pb < 0f;
+		if (!intoRightWall && !intoLeftWall) return;
+
+		attacker.AddPushbackVelocity(-pb);
+		defender.ClearPushbackVelocity();
+	}
+
 	public override void _PhysicsProcess(double delta)
 	{
 		if (debug.ShouldTick)
 		{
 			if (!IsInHitPause)
 			{
+				// Move cornered pushback onto the attacker before positions update this frame.
+				TransferCornerPushback();
 				Player1?.Tick();
 				Player2?.Tick();
 				EnforceStageBoundaries(); // do it twice to ensure nothing silly happens

@@ -53,21 +53,21 @@ transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, -0.5975033, 0)
 
 [node name="CSGBox3D" type="CSGBox3D" parent="world/walls and floor" unique_id=1567150229]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.014403343, -0.49467647, -0.0009446144)
-size = Vector3(15, 0.5, 15)
+size = Vector3(20, 0.5, 15)
 material = SubResource("ShaderMaterial_jr3p7")
 
 [node name="CSGBox3D2" type="CSGBox3D" parent="world/walls and floor" unique_id=1979778453]
 transform = Transform3D(1, 0, 0, 0, -4.371139e-08, -1, 0, 1, -4.371139e-08, 0, 4.3389616, -7.460076)
-size = Vector3(15, 0.5, 10)
+size = Vector3(20, 0.5, 10)
 material = SubResource("ShaderMaterial_qvnt5")
 
 [node name="CSGBox3D3" type="CSGBox3D" parent="world/walls and floor" unique_id=1988257576]
-transform = Transform3D(-4.371139e-08, -1, 0, 1, -4.371139e-08, 0, 0, 0, 1, 7.5, 4.3389616, 0)
+transform = Transform3D(-4.371139e-08, -1, 0, 1, -4.371139e-08, 0, 0, 0, 1, 10, 4.339, 0)
 size = Vector3(10, 0.5, 15)
 material = SubResource("ShaderMaterial_8h4pb")
 
 [node name="CSGBox3D4" type="CSGBox3D" parent="world/walls and floor" unique_id=1628696503]
-transform = Transform3D(-4.371139e-08, -1, 0, 1, -4.371139e-08, 0, 0, 0, 1, -7.5, 4.3389616, 0)
+transform = Transform3D(-4.371139e-08, -1, 0, 1, -4.371139e-08, 0, 0, 0, 1, -10, 4.339, 0)
 size = Vector3(10, 0.5, 15)
 material = SubResource("ShaderMaterial_8h4pb")
 
