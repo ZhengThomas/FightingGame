@@ -1,0 +1,20 @@
+[gd_scene format=3 uid="uid://cmi2khb8u8fcv"]
+
+[ext_resource type="ArrayMesh" uid="uid://c24obfx0m74ud" path="res://models/SlashVFX/StandLight.obj" id="1_1bfvy"]
+[ext_resource type="Shader" uid="uid://b3ilrhxr7thy2" path="res://shaders/generic_smear.gdshader" id="2_n5484"]
+
+[sub_resource type="ShaderMaterial" id="ShaderMaterial_6auix"]
+render_priority = 0
+shader = ExtResource("2_n5484")
+shader_parameter/flat_color = Color(0.6039216, 0.11764706, 0.1254902, 1)
+shader_parameter/opacity = 1.0
+shader_parameter/ortho_amount = 0.0
+shader_parameter/plane_distance = 4.0
+shader_parameter/depth_bias = 0.0
+
+[node name="StandLight" type="Node3D" unique_id=998606099]
+
+[node name="StandLight" type="MeshInstance3D" parent="." unique_id=926788258]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.0701946, 0.032120302, -0.023925781)
+mesh = ExtResource("1_1bfvy")
+surface_material_override/0 = SubResource("ShaderMaterial_6auix")

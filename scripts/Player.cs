@@ -33,52 +33,20 @@ public struct JumpState
     public int AirDashDirection;
     public int FramesSinceLastJump; 
 }
+// Global, match-wide constants. Per-character tunables (speeds, gravity, jump forces, dash
+// timings, knockdown/wakeup, etc.) live in CharacterStats and are read via Player.Stats.
 public static class PlayerConstants
 {
-    public const float Speed = 2f;
-    public const float DashSpeed = 8f;
-    public const float WalkJumpSpeed = 2.3f;
-    public const float DashJumpSpeed = 4.5f;
-    public const float DecelerationSpeed = 0.5f;
-    public const float StrongDecelerationSpeed = 1.0f; // Used when speed is especially high
-    public const float GroundedHitDecelerationSpeed = 0.6f;
-    public const float AirHitDecelerationSpeed = 0.6f;
-    public const float AirHitMinimumSpeed = 1f;
-    public const float StrongDecelerationThreshold = 2.5f;
-    public const float RisingGravity = 0.9f;
-    public const float FloatingGravity = 0.25f;
-    public const float ComboFloatingGravity = 0.08f;
-    public const float FallingGravity = 1.2f;
-    public const float MaxFallSpeed = -11.0f;
-    public const float HitstunRisingGravity = 0.6f;
-    public const float HitstunFloatingGravity = 0.15f;
-    public const float HitstunFallingGravity = 1.5f;
-    public const float FloatingGravityThreshold = 1.4f;
-    public const float MinAirKnockbackSpeed = 1f;
-    public const float JumpForce = 15f;
-    public const float DoubleJumpForce = 11f;
     public const float FloorY = -0.8f;
-    public const int JumpSquatDuration = 4;
-    public const int LandingDuration = 3;
     public const int BufferWindow = 6;
-    public const int CancelBufferWindow = 8; // slightly more lenient during cancels
-    public const int DashInputLeniency = 10; // time between two button presses for a dash
+    public const int CancelBufferWindow = 8;          // slightly more lenient during cancels
+    public const int DashInputLeniency = 10;          // time between two button presses for a dash
     public const float MaxPushboxCorrectionPerFrame = 0.2f;
-    public const int BackDashStartDuration = 3;
-    public const int BackDashRecoverDuration = 13;
-    public const int BackDashDuration = 5;
-    public const float BackDashSpeed = 7f;
-    public const int FramesUntilActionableAfterJump = 7; // it is very important this is greater than the buffer window.
-    public const float AirDashSpeed = 7f;
-    public const int AirDashStartup = 3;
-    public const int AirDashDuration = 7;
-    public const float MaxPlayerSeparation = 6f;     // max distance between the two players
-    public const float MaxDistanceFromCenter = 7f;   // max distance either player can be from the midpoint
-    public const int KnockdownDuration = 30;         // frames spent lying on the ground
-    public const int WakeupDuration = 25;            // frames of the wakeup animation
-    public const int CrossupProtectionWindow = 3;    // frames either direction counts as back after a crossup
+    public const float MaxPlayerSeparation = 6f;      // max distance between the two players
+    public const float MaxDistanceFromCenter = 7f;    // max distance either player can be from the midpoint
+    public const int CrossupProtectionWindow = 3;     // frames either direction counts as back after a crossup
     public const int AirBlockstunLandingPenalty = 15; // extra landing frames when touching down during air blockstun
-    public const float FixedDelta = 0.01666f; // Using a fixed number since the engine delta is not consistent
+    public const float FixedDelta = 0.01666f;         // Using a fixed number since the engine delta is not consistent
 }
 
 public class ActiveMove
@@ -97,7 +65,9 @@ public class ActiveMove
     {
         Data = data;
         Id = id;
-        Frame = 0;
+        // Start at 1 so the press tick counts as startup frame 1 (Frame is not incremented
+        // that same tick — ProcessCurrentState already ran before StartMove).
+        Frame = 1;
     }
 
     public List<Box> GetCurrentHitboxes()
@@ -122,13 +92,15 @@ public class ActiveMove
 
     // Returns the per-frame hurtbox override for the current frame, or null if none.
     // Player.GetCurrentHurtboxes() falls back to the default pose hurtbox when this is null.
+    // Frame is 1-based (press tick = 1); the array is 0-based over the move's lifetime.
     public List<Box> GetHurtboxOverride()
     {
         var perFrame = Data.HurtboxesPerFrame;
         if (perFrame == null) return null;
         List<Box> boxes = null;
-        if (Frame < perFrame.Length)
-            boxes = perFrame[Frame];
+        int index = Frame - 1;
+        if (index >= 0 && index < perFrame.Length)
+            boxes = perFrame[index];
         if (boxes != null)
             lastValidHurtboxes = boxes;
         return lastValidHurtboxes;
@@ -143,6 +115,7 @@ public enum PlayerState
     Landing,
     Airdashing,
     GroundDashing,
+    GroundDashEnd,
     Backdashing,
     Crouching,
     StandAttacking,
@@ -164,10 +137,22 @@ public struct BackdashState
     public int BackDashFrame; // -1 means not backdashing
 }
 
+// Simple count-up timer. Start(duration) when entering a timed state, then Advance() once per tick;
+// Advance returns true on the tick the timer finishes. It's pure data (two ints), so it snapshots
+// and restores cleanly for rollback, and there are no captured callbacks to worry about.
+public struct FrameTimer
+{
+    public int Frame;     // counts up each tick
+    public int Duration;  // total frames for the current phase
+
+    public void Start(int duration) { Frame = 0; Duration = duration; }
+    public bool Advance() { Frame++; return Frame >= Duration; }
+    public readonly bool Done => Frame >= Duration;
+}
+
 public struct HitReactionState
 {
-    public int Frame;     // counts up each tick within the current phase
-    public int Duration;  // total frames for the current phase
+    public FrameTimer Timer;
     public float GravityMultiplier;
     public float hitstunMultiplier;
     public float damageMultiplier;
@@ -176,14 +161,12 @@ public struct HitReactionState
 
 public struct BlockReactionState
 {
-    public int Frame;     // counts up each tick within the current phase
-    public int Duration;  // total frames for the current phase
+    public FrameTimer Timer;
 }
 
 public struct GrabSequenceState
 {
-    public int Frame;    // counts up each tick during GrabHit / HitByGrab
-    public int Duration; // total frames of the grab cinematic
+    public FrameTimer Timer;
 }
 
 // Meant to be a hitbox or hurtbox or whatever
@@ -218,7 +201,10 @@ public partial class Player : Node3D
     public PlayerState CurrentState => currentState;
     public ActiveMove CurrentMove => currentMove;
     public PhysicsState Physics => physics;
+    public int AirDashDirection => jump.AirDashDirection; // +1/-1, the locked-in airdash direction
     BackdashState backdashInfo = new BackdashState{ BackDashFrame = -1 };
+    int dashCooldown = 0; // counts down each tick; while > 0, forward dash and backdash are blocked
+    int groundDashFrame = -1; // ticks spent in the current ground dash (-1 = not dashing); gates the walk/idle exit
     HitReactionState hitReaction;
     BlockReactionState blockReaction;
     GrabSequenceState grabSequence;
@@ -227,10 +213,10 @@ public partial class Player : Node3D
     public bool SuppressGravity = false;
 
     List<Move> moveList;
-    public Box Pushbox = new Box { X = 0, Y = 0, Width = 0.6f, Height = 1.3f };
-    static readonly List<Box> StandingHurtbox = new List<Box>{ new Box { X = 0, Y = 0, Width = 1f, Height = 1.2f } };
-    static readonly List<Box> CrouchingHurtbox = new List<Box>{new Box { X = 0, Y = -0.15f, Width = 1f, Height = 0.9f }};
-    static readonly List<Box> AirborneHurtbox = new List<Box>{new Box { X = 0, Y = 0, Width = 1f, Height = 1.2f }};
+    public Box Pushbox = new Box { X = 0, Y = 0.7f, Width = 0.6f, Height = 1.8f };
+    static readonly List<Box> StandingHurtbox = new List<Box>{ new Box { X = 0, Y = 1.0f, Width = 1f, Height = 2.0f } };
+    static readonly List<Box> CrouchingHurtbox = new List<Box>{new Box { X = 0, Y = 0.5f, Width = 1f, Height = 1.5f }};
+    static readonly List<Box> AirborneHurtbox = new List<Box>{new Box { X = 0, Y = 1.0f, Width = 1f, Height = 2.0f }};
 
     // stores 10 most recently received hit ids
     int[] hitHistory = new int[10];
@@ -363,7 +349,7 @@ public partial class Player : Node3D
             hitReaction.damageMultiplier = 1;
         }
 
-        hitReaction.Duration = data.HitStun > 0 ? data.HitStun : 15;
+        hitReaction.Timer.Duration = data.HitStun > 0 ? data.HitStun : 15;
 
         // We apply the velocity of the attack to the player
         physics.VelocityX = data.Pushback * direction;
@@ -386,7 +372,7 @@ public partial class Player : Node3D
 
     public virtual void BlockAttack(AttackData data, int direction)
     {
-        blockReaction.Duration = data.BlockStun > 0 ? data.BlockStun : 15;
+        blockReaction.Timer.Duration = data.BlockStun > 0 ? data.BlockStun : 15;
         physics.VelocityX = data.PushbackOnBlock == 0 ? data.Pushback : data.PushbackOnBlock;
         physics.VelocityX *= direction;
 
@@ -411,6 +397,9 @@ public partial class Player : Node3D
     protected virtual void StartMove(MoveData moveData, PlayerState attackingState)
     {
         TransitionTo(attackingState);
+        // The attacker (and its slash VFX) draws over the opponent for the duration of the move,
+        // like GGST — not just from the moment a hit connects.
+        Match.BringToFront(this);
         // ID is derived from frame count and player number, like hashing but lazy
         // could overflow if 2 billion frames pass, which is unlikely and i will ignore such a possibility
         int id = PlayerNumber * 1000000 + Match.FrameCount;
@@ -497,7 +486,7 @@ public partial class Player : Node3D
     public void RegisterGrab(Player defender, GrabData grabData)
     {
         grabPartner = defender;
-        grabSequence.Duration = grabData.GrabSequenceDuration;
+        grabSequence.Timer.Duration = grabData.GrabSequenceDuration;
 
         if (grabData.IsBackThrow)
             FlipFacing();
@@ -520,7 +509,7 @@ public partial class Player : Node3D
         hitHistoryIndex = (hitHistoryIndex + 1) % hitHistory.Length;
 
         grabPartner = attacker;
-        grabSequence.Duration = grabData.GrabSequenceDuration;
+        grabSequence.Timer.Duration = grabData.GrabSequenceDuration;
 
         TransitionTo(PlayerState.HitByGrab);
     }
@@ -690,6 +679,7 @@ public partial class Player : Node3D
 
     bool ForwardDashInputted()
     {
+        if (dashCooldown > 0) return false;
         bool forwardIsRight = GetFacing() == FacingDirection.Right;
         bool dashMacro = forwardIsRight
             ? inputBuffer.WasJustPressed(PlayerConstants.BufferWindow, f => f.Dash, [f => f.Right]) != null
@@ -711,6 +701,7 @@ public partial class Player : Node3D
     public void Tick(InputFrame[] buffer)
     {
         inputBuffer = buffer;
+        if (dashCooldown > 0) dashCooldown--;
         updateFacing();
         ApplyGravity();
         ProcessCurrentState();
@@ -853,24 +844,21 @@ public partial class Player : Node3D
 
     protected virtual void HandleBlockstunState()
     {
-        blockReaction.Frame++;
         Decelerate(Stats.GroundedHitDecelerationSpeed);
-        if (blockReaction.Frame >= blockReaction.Duration)
+        if (blockReaction.Timer.Advance())
             TransitionTo(PlayerState.Idle);
     }
 
     protected virtual void HandleCrouchBlockstunState()
     {
-        blockReaction.Frame++;
         Decelerate(Stats.GroundedHitDecelerationSpeed);
-        if (blockReaction.Frame >= blockReaction.Duration)
+        if (blockReaction.Timer.Advance())
             TransitionTo(PlayerState.Crouching);
     }
     protected virtual void HandleAirBlockstunState()
     {
-        blockReaction.Frame++;
         AirHitDecelerate();
-        if (blockReaction.Frame >= blockReaction.Duration)
+        if (blockReaction.Timer.Advance())
             TransitionTo(PlayerState.Jumping);
     }
 
@@ -903,23 +891,23 @@ public partial class Player : Node3D
 
     protected virtual void HandleGrabHitState()
     {
-        grabSequence.Frame++;
+        grabSequence.Timer.Frame++;
         Decelerate();
-        if (grabSequence.Frame < 20)
+        if (grabSequence.Timer.Frame < 20)
         {
             grabPartner.Decelerate();
         }
 
         // Drive the grab here using grabPartner.SetVelocity / AddVelocity / SnapToPosition.
-        if (grabSequence.Frame == 20)
+        if (grabSequence.Timer.Frame == 20)
         {
             grabPartner.SetVelocity(3f * (int)GetFacing(), 9f);
-            grabPartner.hitReaction.Duration = 100; // They get "hit" by the grab and are sent flying ish
+            grabPartner.hitReaction.Timer.Duration = 100; // They get "hit" by the grab and are sent flying ish
             // this will be custom for each character, but rn im lazy and this is simple and sounds right
             grabPartner.TransitionTo(PlayerState.AirHitstun);
         }
 
-        if (grabSequence.Frame >= grabSequence.Duration) {
+        if (grabSequence.Timer.Done) {
             TransitionTo(PlayerState.Idle);
             return;
         }
@@ -927,7 +915,7 @@ public partial class Player : Node3D
 
     protected virtual void HandleHitByGrabState()
     {
-        grabSequence.Frame++;
+        grabSequence.Timer.Frame++;
 
         // The attacker drives this player's position and velocity via the Player movement API.
         // The attacker is responsible for launching us out of this state at the right time.
@@ -1086,19 +1074,16 @@ public partial class Player : Node3D
     }
     protected virtual void HandleHitstunState()
     {
-        hitReaction.Frame++;
         Decelerate(Stats.GroundedHitDecelerationSpeed);
-        if (hitReaction.Frame >= hitReaction.Duration)
+        if (hitReaction.Timer.Advance())
             TransitionTo(PlayerState.Idle);
     }
 
     protected virtual void HandleAirHitstunState()
     {
-        hitReaction.Frame++;
         // Gravity is applied by ApplyGravity; landing is caught by ResolveFloorCollision -> Knockdown
-
         AirHitDecelerate();
-        if (hitReaction.Frame >= hitReaction.Duration)
+        if (hitReaction.Timer.Advance())
             TransitionTo(PlayerState.Jumping);
     }
 
@@ -1106,35 +1091,25 @@ public partial class Player : Node3D
     {
         physics.VelocityX = 0;
         physics.VelocityY = 0;
-        hitReaction.Frame++;
         // TODO: check for quickrise input here
-        if (hitReaction.Frame >= hitReaction.Duration)
+        if (hitReaction.Timer.Advance())
             TransitionTo(PlayerState.Wakeup);
     }
 
     protected virtual void HandleWakeupState()
     {
-        hitReaction.Frame++;
         // TODO: wakeup is typically invincible for some frames
-        if (hitReaction.Frame >= hitReaction.Duration)
+        if (hitReaction.Timer.Advance())
             TransitionTo(PlayerState.Idle);
     }
     protected virtual void HandleCrouchingState()
     {
         Decelerate();
 
-        Move usedMove = CheckMoveList();
+        if (TryStartAttack()) return;
+        if (TryStartJump(onHold: false)) return;
 
-        if(usedMove != null)
-        {
-            usedMove.Execute(); // this transitions for us,
-        }
-        else if (inputBuffer.WasJustPressed(PlayerConstants.BufferWindow, f => f.Jump) != null)
-        {
-            JumpSquat();
-            TransitionTo(PlayerState.JumpSquat);
-        }
-        else if (!inputBuffer[0].Down)
+        if (!inputBuffer[0].Down)
             TransitionTo(PlayerState.Idle);
     }
 
@@ -1164,93 +1139,99 @@ public partial class Player : Node3D
         return null;
     }
 
+    // --- Shared transition attempts used by the actionable grounded states (idle / walk / crouch /
+    // dash). Each checks one possible action and, if its input is present, performs the transition
+    // and returns true. Callers chain them with `if (TryX()) return;` so the first match wins,
+    // exactly like the old else-if ladders. This keeps every state's "what can I do from here" list
+    // in one place instead of copy-pasted per handler.
+
+    // Attack out of the current state (the matched move's Execute() does the transition).
+    protected bool TryStartAttack()
+    {
+        Move move = CheckMoveList();
+        if (move == null) return false;
+        move.Execute();
+        return true;
+    }
+
+    // Jump. Idle/Walking allow buffered *held* jump; crouch/dash require a fresh press (onHold: false).
+    protected bool TryStartJump(bool onHold)
+    {
+        bool jumpInput = onHold
+            ? inputBuffer.WasHeld(PlayerConstants.BufferWindow, f => f.Jump)
+            : inputBuffer.WasJustPressed(PlayerConstants.BufferWindow, f => f.Jump) != null;
+        if (!jumpInput) return false;
+        JumpSquat();
+        TransitionTo(PlayerState.JumpSquat);
+        return true;
+    }
+
+    protected bool TryStartCrouch()
+    {
+        if (!inputBuffer[0].Down) return false;
+        TransitionTo(PlayerState.Crouching);
+        return true;
+    }
+
+    protected bool TryForwardDash()
+    {
+        if (!ForwardDashInputted()) return false;
+        TransitionTo(PlayerState.GroundDashing);
+        return true;
+    }
+
+    protected bool TryBackdash()
+    {
+        if (!BackDashInputted()) return false;
+        TransitionTo(PlayerState.Backdashing);
+        return true;
+    }
+
     protected virtual void HandleIdleState()
     {
         HandleGroundedMovement();
-        Move usedMove = CheckMoveList();
 
-        if(usedMove != null)
-        {
-            usedMove.Execute(); // transitions to attacking for us
-        }
-        else if (inputBuffer.WasHeld(PlayerConstants.BufferWindow, f => f.Jump)){
-            JumpSquat();
-            TransitionTo(PlayerState.JumpSquat);
-        }
-        else if (inputBuffer[0].Down)
-        {
-            TransitionTo(PlayerState.Crouching);
-        }
-        else if (ForwardDashInputted())
-        {
-            TransitionTo(PlayerState.GroundDashing);
-        }
-        else if (BackDashInputted())
-        {
-            TransitionTo(PlayerState.Backdashing);
-        }
-        else if (inputBuffer[0].Right || inputBuffer[0].Left){
+        if (TryStartAttack()) return;
+        if (TryStartJump(onHold: true)) return;
+        if (TryStartCrouch()) return;
+        if (TryForwardDash()) return;
+        if (TryBackdash()) return;
+
+        if (inputBuffer[0].Right || inputBuffer[0].Left)
             TransitionTo(PlayerState.Walking);
-        }
     }
 
     protected virtual void HandleWalkingState()
     {
         HandleGroundedMovement();
-        Move usedMove = CheckMoveList();
 
-        if(usedMove != null)
-        {
-            usedMove.Execute();
-        }
-        else if (inputBuffer.WasHeld(PlayerConstants.BufferWindow, f => f.Jump))
-        {
-            JumpSquat();
-            TransitionTo(PlayerState.JumpSquat);
-        }
-        else if (inputBuffer[0].Down)
-        {
-            TransitionTo(PlayerState.Crouching);
-        }
-        else if (ForwardDashInputted())
-        {
-            TransitionTo(PlayerState.GroundDashing);
-        }
-        else if (BackDashInputted())
-        {
-            TransitionTo(PlayerState.Backdashing);
-        }
-        else if(!(inputBuffer[0].Right || inputBuffer[0].Left)){
+        if (TryStartAttack()) return;
+        if (TryStartJump(onHold: true)) return;
+        if (TryStartCrouch()) return;
+        if (TryForwardDash()) return;
+        if (TryBackdash()) return;
+
+        if (!(inputBuffer[0].Right || inputBuffer[0].Left))
             TransitionTo(PlayerState.Idle);
-        }
     }
 
     protected virtual void HandleGroundDashState()
     {
-        bool forwardHeld = GetFacing() == FacingDirection.Right ? inputBuffer[0].Right : inputBuffer[0].Left;
-        bool backHeld    = GetFacing() == FacingDirection.Right ? inputBuffer[0].Left  : inputBuffer[0].Right;
+        groundDashFrame++;
         HandleGroundedDashMovement();
 
-        Move usedMove = CheckMoveList();
+        // Attacks, jumps, crouches, and backdashes can cancel the dash at any time.
+        if (TryStartAttack()) return;
+        if (TryStartJump(onHold: false)) return;
+        if (TryStartCrouch()) return;
+        if (TryBackdash()) return;
 
-        if(usedMove != null)
-        {
-            usedMove.Execute();
-        }
-        else if (inputBuffer.WasJustPressed(PlayerConstants.BufferWindow, f => f.Jump) != null)
-        {
-            JumpSquat();
-            TransitionTo(PlayerState.JumpSquat);
-        }
-        else if (inputBuffer[0].Down)
-        {
-            TransitionTo(PlayerState.Crouching);
-        }
-        else if (BackDashInputted())
-        {
-            TransitionTo(PlayerState.Backdashing);
-        }
-        else if (!(inputBuffer[0].Right || inputBuffer[0].Left))
+        // Returning to walk/idle is locked out until the dash has run for its minimum duration.
+        if (groundDashFrame < Stats.MinDashDuration) return;
+
+        bool backHeld = GetFacing() == FacingDirection.Right ? inputBuffer[0].Left : inputBuffer[0].Right;
+        if (!(inputBuffer[0].Right || inputBuffer[0].Left) && !inputBuffer[0].Dash)
+            // Holding dash keeps dashing forward.
             TransitionTo(PlayerState.Idle);
         else if (backHeld)
             TransitionTo(PlayerState.Walking);
@@ -1345,6 +1326,12 @@ public partial class Player : Node3D
             jump.LandingFrame = -1;
         if (currentState == PlayerState.Backdashing)
             backdashInfo.BackDashFrame = -1;
+        // Leaving a ground dash starts the dash cooldown to block immediate redashing
+        if (currentState == PlayerState.GroundDashing)
+        {
+            dashCooldown = Stats.DashCooldown;
+            groundDashFrame = -1;
+        }
         if (currentState == PlayerState.Airdashing)
             jump.AirdashFrame = -1;
         if (IsAttacking()){
@@ -1365,6 +1352,8 @@ public partial class Player : Node3D
             jump.FramesSinceLastJump = 0;
             jump.JumpSquatFrame = 0;
         }
+        if (newState == PlayerState.GroundDashing)
+            groundDashFrame = 0;
         if (newState == PlayerState.Landing)
             jump.LandingFrame = 0;
         if (newState == PlayerState.Backdashing)
@@ -1377,23 +1366,15 @@ public partial class Player : Node3D
         if (newState == PlayerState.GrabOccurring)
             currentBufferWindow = PlayerConstants.CancelBufferWindow;
         if (newState == PlayerState.GrabHit || newState == PlayerState.HitByGrab)
-            grabSequence.Frame = 0;
+            grabSequence.Timer.Frame = 0;
         if (newState == PlayerState.Hitstun || newState == PlayerState.AirHitstun)
-            hitReaction.Frame = 0;
+            hitReaction.Timer.Frame = 0;
         if (newState == PlayerState.Knockdown)
-        {
-            hitReaction.Frame = 0;
-            hitReaction.Duration = Stats.KnockdownDuration;
-        }
+            hitReaction.Timer.Start(Stats.KnockdownDuration);
         if (newState == PlayerState.Wakeup)
-        {
-            hitReaction.Frame = 0;
-            hitReaction.Duration = Stats.WakeupDuration;
-        }
+            hitReaction.Timer.Start(Stats.WakeupDuration);
         if (newState == PlayerState.Blockstun || newState == PlayerState.CrouchBlockstun || newState == PlayerState.AirBlockstun)
-        {
-            blockReaction.Frame = 0;
-        }
+            blockReaction.Timer.Frame = 0;
 
         currentState = newState;
     }
@@ -1410,12 +1391,7 @@ public partial class Player : Node3D
 
     protected virtual void HandleGroundedDashMovement()
     {
-        if (inputBuffer[0].Right)
-            physics.VelocityX = GetFacing() == FacingDirection.Right ? Stats.DashSpeed : -Stats.DashSpeed;
-        else if (inputBuffer[0].Left)
-            physics.VelocityX = GetFacing() == FacingDirection.Left ? -Stats.DashSpeed : Stats.DashSpeed;
-        else
-            Decelerate();
+        physics.VelocityX = GetFacing() == FacingDirection.Right ? Stats.DashSpeed : -Stats.DashSpeed;
     }
 
     protected virtual void HandleBackDashMovement()
@@ -1493,9 +1469,12 @@ public partial class Player : Node3D
 
     protected virtual void SetupJumpDirection()
     {
-        InputFrame? frame = inputBuffer.WasJustPressed(PlayerConstants.BufferWindow, f => f.Jump);
-        if (frame is { Right: true }) jump.jumpDirection = 1;
-        else if (frame is { Left: true }) jump.jumpDirection = -1;
+        // Prefer the direction held at the jump press edge (respects buffered inputs). When jump is
+        // held through a landing there is no fresh press edge, so fall back to the currently held
+        // direction — this lets hold-jump bunny-hopping keep its forward/back momentum.
+        InputFrame source = inputBuffer.WasJustPressed(PlayerConstants.BufferWindow, f => f.Jump) ?? inputBuffer[0];
+        if (source.Right) jump.jumpDirection = 1;
+        else if (source.Left) jump.jumpDirection = -1;
         else jump.jumpDirection = 0;
     }
 

@@ -1,0 +1,20 @@
+[gd_scene format=3 uid="uid://blfotjo56ex64"]
+
+[ext_resource type="ArrayMesh" uid="uid://cnhhm55qn0s0w" path="res://models/SlashVFX/JumpMedium.obj" id="1_rjkmu"]
+[ext_resource type="Shader" uid="uid://d245h7gi2cco2" path="res://shaders/slash.gdshader" id="2_ulqy2"]
+[ext_resource type="Texture2D" uid="uid://c5xi11eafmqv3" path="res://models/CharacterModellingAttemp3_SlashTexture.png" id="3_idab7"]
+
+[sub_resource type="ShaderMaterial" id="ShaderMaterial_vt3o2"]
+render_priority = 0
+shader = ExtResource("2_ulqy2")
+shader_parameter/slash_texture = ExtResource("3_idab7")
+shader_parameter/opacity = 1.0
+shader_parameter/ortho_amount = 0.7
+shader_parameter/plane_distance = 4.0
+
+[node name="JumpMedium" type="Node3D" unique_id=305492078]
+transform = Transform3D(0.9, 0, 0, 0, 0.9, 0, 0, 0, 0.9, 0, 0, 0)
+
+[node name="JumpMedium" type="MeshInstance3D" parent="." unique_id=982259563]
+mesh = ExtResource("1_rjkmu")
+surface_material_override/0 = SubResource("ShaderMaterial_vt3o2")

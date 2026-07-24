@@ -56,6 +56,17 @@ public partial class MatchManager : Node
 	public const int DefaultHitstopDurationHeavy = 9;
 	public bool IsInHitPause => hitPauseFramesRemaining > 0;
 
+	// Draw order: which player's mesh should render on top where the two overlap (like GGST).
+	// Defaults to Player 1; whoever lands a hit or grab most recently is brought to the front.
+	// PlayerAnimator reads FrontPlayer and applies a depth-only bias in the shader (no size change).
+	Player frontPlayer;
+	public Player FrontPlayer => frontPlayer ?? Player1;
+
+	// Bring a player to the front layer (draw-order only, no gameplay effect). Called when a player
+	// starts an attack so the attacker — and its slash VFX — draw over the opponent, GGST-style,
+	// even before the hit connects.
+	public void BringToFront(Player player) => frontPlayer = player;
+
 	DebugManager debug;
 	InputManager inputManager;
 
@@ -262,6 +273,7 @@ public partial class MatchManager : Node
 							{
 								defender.GetGrabbed(grabData, attack.Id, attacker);
 								attacker.RegisterGrab(defender, grabData);
+								frontPlayer = attacker; // last to connect draws in front
 							}
 						}
 						else if (attack.Data is AttackData hitData)
@@ -269,6 +281,7 @@ public partial class MatchManager : Node
 							bool blocked = defender.TakeHit(hitData, attack.Id, attackDir, attacker);
 							attacker.RegisterHit(attack.Id, blocked);
 							TriggerHitPause(hitData.HitPauseDuration, hitData.Strength);
+							frontPlayer = attacker; // last to connect draws in front
 						}
 
 						return;

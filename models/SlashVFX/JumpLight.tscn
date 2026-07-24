@@ -1,0 +1,47 @@
+[gd_scene format=4 uid="uid://ddemtf71780gb"]
+
+[ext_resource type="Shader" uid="uid://b3ilrhxr7thy2" path="res://shaders/generic_smear.gdshader" id="1_pvnjt"]
+
+[sub_resource type="ArrayMesh" id="ArrayMesh_wj4ta"]
+_surfaces = [{
+"aabb": AABB(-0.200405, 1.229193, 0.493862, 1.219316, 0.10332, 1e-05),
+"format": 34896613377,
+"index_count": 30,
+"index_data": PackedByteArray("AAABAAIAAgABAAMAAwABAAQABAABAAUABQABAAYABgABAAcABwABAAgACAABAAkACQABAAoACgABAAsA"),
+"name": "Material",
+"primitive": 3,
+"uv_scale": Vector4(0, 0, 0, 0),
+"vertex_count": 12,
+"vertex_data": PackedByteArray("JPjAzgAAAAD///9/AAAAAGbl//8AAAAAp7fe8gAAAADSgELVAAAAALVLsrMAAAAAAABzgQAAAAC1SzNPAAAAANKAoy0AAAAAp7cHEAAAAABm5QAAAAAAACT4PjEAAAAA")
+}]
+blend_shape_mode = 0
+
+[sub_resource type="ArrayMesh" id="ArrayMesh_l5s3c"]
+_surfaces = [{
+"aabb": AABB(-0.200405, 1.229193, 0.493862, 1.219316, 0.10332, 1e-05),
+"attribute_data": PackedByteArray("////P////3///wAA/78AAP9/AAD/PwAAAAD///8/////f////7////////////+/"),
+"format": 34896613399,
+"index_count": 30,
+"index_data": PackedByteArray("AAABAAIAAgABAAMAAwABAAQABAABAAUABQABAAYABgABAAcABwABAAgACAABAAkACQABAAoACgABAAsA"),
+"name": "Material",
+"primitive": 3,
+"uv_scale": Vector4(0, 0, 0, 0),
+"vertex_count": 12,
+"vertex_data": PackedByteArray("JPjAzgAA/n////9/AAAmgGbl//8AAP2Ap7fe8gAA0YHSgELVAAAqgrVLsrMAAFqAAABzgQAAWIG1SzNPAABIgtKAoy0AACqCp7cHEAAA04Fm5QAAAAA1gST4PjEAAP5//3////9//3//////////////////f/9//3//f/9//3//f/9//3//f/9//3//f///")
+}]
+blend_shape_mode = 0
+shadow_mesh = SubResource("ArrayMesh_wj4ta")
+
+[sub_resource type="ShaderMaterial" id="ShaderMaterial_hq3fy"]
+render_priority = 0
+shader = ExtResource("1_pvnjt")
+shader_parameter/flat_color = Color(0.9372549, 0.8235294, 0.7647059, 1)
+shader_parameter/opacity = 1.0
+shader_parameter/ortho_amount = 0.7
+shader_parameter/plane_distance = 4.0
+
+[node name="JumpLight" type="Node3D" unique_id=1457736975]
+
+[node name="JumpLight" type="MeshInstance3D" parent="." unique_id=959879238]
+mesh = SubResource("ArrayMesh_l5s3c")
+surface_material_override/0 = SubResource("ShaderMaterial_hq3fy")

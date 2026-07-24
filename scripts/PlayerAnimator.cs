@@ -1,4 +1,5 @@
 using Godot;
+using System.Collections.Generic;
 
 // Drives the animated character model based on its parent Player's state.
 // This is a self-contained visual layer: Player has no animation code and never calls into here.
@@ -16,14 +17,27 @@ public partial class PlayerAnimator : Node3D
     [Export] public string JumpSquatAnim = "JumpSquat";
     [Export] public string JumpRiseAnim = "JumpUp";
     [Export] public string FallAnim = "IntoFalling";
-    [Export] public string WakeupAnim = "StandUp";
+    [Export] public string LandingAnim = "Landing";
+    [Export] public string WakeupAnim = "WakeupSlow";       // rising after a knockdown
+
+    // Reaction clips. The "...End"/hurt clips are recovery-style animations; used here as the whole
+    // reaction until dedicated held-hurt/held-block clips exist (placeholders, easy to swap later).
+    [Export] public string HurtAnim = "StandingHurtEnd";        // grounded hitstun
+    [Export] public string AirHurtRiseAnim = "LaunchingHurt";   // airborne hitstun, rising
+    [Export] public string AirHurtFallAnim = "FallingHurt";     // airborne hitstun, falling
+    [Export] public string KnockdownAnim = "HardKnockdown";     // landing from hurt is always a hard knockdown
+    [Export] public string BlockAnim = "StandBlockEnd";         // standing blockstun
+    [Export] public string CrouchBlockAnim = "CrouchBlockEnd";  // crouch blockstun
+    [Export] public string AirBlockAnim = "IntoFalling";        // air blockstun (placeholder: no air-block clip yet)
+    [Export] public string AirdashForwardAnim = "AirdashForwards";
+    [Export] public string AirdashBackAnim = "AirdashBackwards";
 
     // One-shot transition clips: played once on a state change, then handing off to the loop.
     // Enter transitions depend only on the state entered; exit transitions depend on the state left.
     [Export] public string RunStartAnim = "RunStart";       // enter run
     [Export] public string RunStopAnim = "RunStop";         // exit run -> standing
     [Export] public string CrouchDownAnim = "CrouchDown";   // enter crouch
-    [Export] public string CrouchStandAnim = "CrouchStand"; // exit crouch -> standing
+    [Export] public string CrouchStandAnim = "StandUp";     // exit crouch -> standing
 
     // Seconds of cross-fade when switching clips. This is what smooths the walk->idle snap.
     // It's time-based, but driven by our manual Advance(), so it still respects tick-lock/pause.
@@ -40,8 +54,12 @@ public partial class PlayerAnimator : Node3D
     // A surface is treated as the outline if its material has no texture, culls front faces, or
     // its name contains this hint. Set this to your outline material/object name if detection is off.
     [Export] public string OutlineNameHint = "outline";
+    // Tiny reverse-Z depth nudge applied when this player is the "front" one (see MatchManager)
+    // so it renders on top of the other where they overlap
+    [Export] public float DrawOrderDepthBias = 0.003f;
 
     protected Player player;
+    protected MatchManager matchManager;
     protected Node3D model;
     protected AnimationPlayer animPlayer;
     protected Basis modelBaseBasis;   // the model's editor orientation/scale = "facing right"
@@ -51,7 +69,17 @@ public partial class PlayerAnimator : Node3D
     // The state we were in last tick, and how many ticks remain in the current transition clip
     // (0 = no transition in progress, just play the steady-state loop).
     protected PlayerState prevState;
+    // Id of the attack that was active last tick.
+    protected int lastMoveId = -1;
     protected int transitionTicksLeft;
+    // While a one-shot transition is playing, a state change only cuts it short if the incoming
+    // state's priority is >= this threshold. Locomotion sits below every threshold, so wandering
+    // between idle/walk can't cancel a stop/turn clip; committing to a jump/crouch/attack can.
+    protected int transitionCancelThreshold;
+
+    // Every hybrid-projection material we created, so we can update plane_distance each frame to
+    // match the camera's current distance (keeps character size consistent with the world at any zoom).
+    protected readonly List<ShaderMaterial> hybridMaterials = new List<ShaderMaterial>();
 
     // Mirrors across the X axis (parent space), so the model flips to face the other side
     // instead of physically turning around.
@@ -63,6 +91,7 @@ public partial class PlayerAnimator : Node3D
     public override void _Ready()
     {
         player = GetParent<Player>();
+        matchManager = GetNodeOrNull<MatchManager>("/root/MatchManager");
         if (player == null)
         {
             GD.PushWarning("PlayerAnimator: parent is not a Player node.");
@@ -99,6 +128,18 @@ public partial class PlayerAnimator : Node3D
             ForceNoLoop(RunStopAnim);
             ForceNoLoop(CrouchDownAnim);
             ForceNoLoop(CrouchStandAnim);
+
+            // Reaction / one-shot state clips also hold their last frame instead of looping.
+            ForceNoLoop(LandingAnim);
+            ForceNoLoop(WakeupAnim);
+            ForceNoLoop(HurtAnim);
+            ForceNoLoop(AirHurtRiseAnim);
+            ForceNoLoop(AirHurtFallAnim);
+            ForceNoLoop(KnockdownAnim);
+            ForceNoLoop(BlockAnim);
+            ForceNoLoop(CrouchBlockAnim);
+            ForceNoLoop(AirdashForwardAnim);
+            ForceNoLoop(AirdashBackAnim);
         }
 
         if (UseHybridProjection)
@@ -172,6 +213,7 @@ public partial class PlayerAnimator : Node3D
                 }
                 swapped.SetShaderParameter("ortho_amount", OrthoAmount);
                 swapped.SetShaderParameter("plane_distance", PlaneDistance);
+                hybridMaterials.Add(swapped);
 
                 mesh.SetSurfaceOverrideMaterial(i, swapped);
             }
@@ -179,6 +221,37 @@ public partial class PlayerAnimator : Node3D
 
         foreach (Node child in node.GetChildren())
             ApplyHybridToNode(child, bodyShader, outlineShader);
+    }
+
+    // Keeps the hybrid shader's plane_distance equal to the camera's current distance to the fight
+    // plane (z = 0). This makes the character scale with the perspective world at every zoom level,
+    // so it no longer grows relative to the stage (which caused ground/walls to clip in when zoomed).
+    public override void _Process(double delta)
+    {
+        if (!UseHybridProjection || hybridMaterials.Count == 0)
+            return;
+
+        Camera3D cam = GetViewport()?.GetCamera3D();
+        if (cam == null)
+            return;
+
+        // Players live on z = 0 and the camera looks straight down -Z, so its distance to the
+        // plane is just its world Z.
+        float planeDist = cam.GlobalPosition.Z;
+        if (planeDist <= 0.01f)
+            return;
+
+        // If we're the current front player, nudge our sorting depth so we draw over the other
+        // where the two overlap (no size change, unlike physically moving in Z).
+        float depthBias = (matchManager != null && matchManager.FrontPlayer == player)
+            ? DrawOrderDepthBias
+            : 0f;
+
+        foreach (ShaderMaterial mat in hybridMaterials)
+        {
+            mat.SetShaderParameter("plane_distance", planeDist);
+            mat.SetShaderParameter("depth_bias", depthBias);
+        }
     }
 
     // Called once per game tick (via Player.Ticked). Advances the animation by exactly one tick.
@@ -204,49 +277,94 @@ public partial class PlayerAnimator : Node3D
         UpdateAnimation();
     }
 
+    // Animation "commitment" priorities. A one-shot transition clip that's playing is only cut short
+    // by a state change whose priority is >= that transition's CancelThreshold (see GetTransition).
+    // Add finer tiers here later (e.g. a separate "hit" tier above actions) as you need them.
+    protected const int PriorityLocomotion = 0; // idle / walk — never interrupts a protected transition
+    protected const int PriorityAction     = 1; // jump / crouch / attack / dash / hit — does interrupt
+
+    // A one-shot clip plus the priority needed to cancel it early.
+    protected readonly record struct AnimTransition(string Clip, int CancelThreshold);
+
+    // How disruptive it is to *enter* a state. Only idle/walk are cheap locomotion; everything else
+    // is a committed action. This is what lets a stop/turn clip survive idle<->walk flicker but still
+    // get cancelled the instant you actually do something.
+    protected virtual int StatePriority(PlayerState state)
+        => (state == PlayerState.Idle || state == PlayerState.Walking)
+            ? PriorityLocomotion
+            : PriorityAction;
+
     // Every tick:
-    //  - If the state just changed, start that transition's clip (or go straight to the loop).
-    //    Because this always runs on a state change, transitions are interruptible.
-    //  - Otherwise, keep counting down the current transition; once it's done, play the loop.
+    //  - On a state change, (re)start that transition's clip or the loop — but only if we're not
+    //    already inside a protected transition that the incoming state isn't allowed to cancel.
+    //  - Always count down the running transition; once it's done, resolve to the loop for whatever
+    //    state we're in *now* (so a dash-stop that finishes while holding back lands on walk-back).
     protected virtual void UpdateAnimation()
     {
         PlayerState state = player.CurrentState;
+        int moveId = player.IsAttacking() ? (player.CurrentMove?.Id ?? -1) : -1;
+        bool newMove = moveId != -1 && moveId != lastMoveId;
+        bool startedClip = false;
 
-        // state just changed
         if (state != prevState)
         {
-            string transition = TransitionClip(prevState, state);
-            if (transition != null && animPlayer != null && animPlayer.HasAnimation(transition))
-                PlayTransition(transition);
+            bool inProtectedTransition = transitionTicksLeft > 0;
+            bool canInterrupt = !inProtectedTransition
+                || StatePriority(state) >= transitionCancelThreshold;
+
+            if (canInterrupt)
+            {
+                AnimTransition? transition = GetTransition(prevState, state);
+                if (transition.HasValue && animPlayer != null && animPlayer.HasAnimation(transition.Value.Clip))
+                    PlayTransition(transition.Value.Clip, transition.Value.CancelThreshold);
+                else
+                    PlayLoop();
+                startedClip = true;
+            }
+            // else: the running transition is protected against this state — leave it playing.
+        }
+        else if (newMove)
+        {
+            // A new attack started without a state change (chaining/mashing into the same attack).
+            transitionTicksLeft = 0;
+            PlayClip(PickAnim(), forceRestart: true);
+            startedClip = true;
+        }
+
+        if (!startedClip)
+        {
+            if (transitionTicksLeft > 0)
+            {
+                transitionTicksLeft--;
+                if (transitionTicksLeft == 0)
+                    PlayLoop();
+            }
             else
+            {
+                // No transition running: keep the loop up to date (catches within-state changes
+                // like walk direction flips or jump rise -> fall).
                 PlayLoop();
-        }
-        else if (transitionTicksLeft > 0)
-        {
-            transitionTicksLeft--;
-            if (transitionTicksLeft == 0)
-                PlayLoop();
-        }
-        else
-        {
-            // No transition running: keep the loop up to date (catches within-state changes
-            // like walk direction flips or jump rise -> fall).
-            PlayLoop();
+            }
         }
 
         prevState = state;
+        lastMoveId = moveId;
     }
 
-    // The one-shot clip to play for a state change, or null if the switch is instant.
-    protected virtual string TransitionClip(PlayerState from, PlayerState to)
+    // The one-shot clip to play for a state change (plus what it takes to cancel it early), or null
+    // if the switch is instant. Exit transitions use PriorityAction so idle<->walk won't cancel them
+    // but any real action will.
+    protected virtual AnimTransition? GetTransition(PlayerState from, PlayerState to)
     {
         // Enter transitions (depend on the state being entered).
-        if (to == PlayerState.GroundDashing) return RunStartAnim;
-        if (to == PlayerState.Crouching && IsStandingState(from))     return CrouchDownAnim;
+        if (to == PlayerState.GroundDashing)                          return new AnimTransition(RunStartAnim, PriorityAction);
+        // Crouch down/stand up use a locomotion threshold so anything (even standing back up) cancels
+        // them instantly — keeps teabags feeling snappy instead of locked into the full clip.
+        if (to == PlayerState.Crouching && IsStandingState(from))     return new AnimTransition(CrouchDownAnim, PriorityLocomotion);
 
         // Exit transitions (depend on the state being left, back to neutral standing).
-        if (from == PlayerState.GroundDashing && IsStandingState(to)) return RunStopAnim;
-        if (from == PlayerState.Crouching     && IsStandingState(to)) return CrouchStandAnim;
+        if (from == PlayerState.GroundDashing && IsStandingState(to)) return new AnimTransition(RunStopAnim, PriorityAction);
+        if (from == PlayerState.Crouching     && IsStandingState(to)) return new AnimTransition(CrouchStandAnim, PriorityLocomotion);
 
         return null;
     }
@@ -257,18 +375,43 @@ public partial class PlayerAnimator : Node3D
     // Steady-state clip for the current state (the loop that plays once a transition finishes).
     protected virtual string PickAnim()
     {
+        // Attacks are data-driven: the active move names its own clip, so a single attack state can
+        // drive any of its moves' animations. Falls through to the state defaults if no clip is set.
+        if (player.IsAttacking())
+        {
+            string moveAnim = player.CurrentMove?.Data?.AnimationName;
+            if (!string.IsNullOrEmpty(moveAnim))
+                return moveAnim;
+        }
+
         return player.CurrentState switch
         {
-            PlayerState.Walking        => WalkAnimForDirection(),
-            PlayerState.GroundDashing   => RunAnim, // "run" == forward dash in this game
-            PlayerState.Backdashing     => BackdashAnim,
-            PlayerState.Crouching or PlayerState.CrouchAttacking or PlayerState.CrouchBlockstun => CrouchAnim,
-            PlayerState.JumpSquat       => JumpSquatAnim,
-            PlayerState.Jumping or PlayerState.Airdashing or PlayerState.AirAttacking
+            PlayerState.Walking          => WalkAnimForDirection(),
+            PlayerState.GroundDashing    => RunAnim, // "run" == forward dash in this game
+            PlayerState.Backdashing      => BackdashAnim,
+            PlayerState.Crouching or PlayerState.CrouchAttacking => CrouchAnim,
+            PlayerState.JumpSquat        => JumpSquatAnim,
+            PlayerState.Jumping or PlayerState.AirAttacking
                 => player.Physics.VelocityY > 0f ? JumpRiseAnim : FallAnim,
-            PlayerState.Wakeup          => WakeupAnim,
-            _ => IdleAnim, // states without a dedicated clip yet (landing, attacks, hitstun, block, grabs)
+            PlayerState.Airdashing       => AirdashAnimForDirection(),
+            PlayerState.Landing          => LandingAnim,
+            PlayerState.Hitstun          => HurtAnim,
+            PlayerState.AirHitstun       => player.Physics.VelocityY > 0f ? AirHurtRiseAnim : AirHurtFallAnim,
+            PlayerState.Knockdown        => KnockdownAnim,
+            PlayerState.Wakeup           => WakeupAnim,
+            PlayerState.Blockstun        => BlockAnim,
+            PlayerState.CrouchBlockstun  => CrouchBlockAnim,
+            PlayerState.AirBlockstun     => AirBlockAnim,
+            _ => IdleAnim, // remaining states without a dedicated clip (grabs)
         };
+    }
+
+    // Forward vs backward airdash based on the locked-in airdash direction (velocity is 0 on startup).
+    protected virtual string AirdashAnimForDirection()
+    {
+        bool forward = (player.GetFacing() == FacingDirection.Right && player.AirDashDirection > 0)
+                    || (player.GetFacing() == FacingDirection.Left  && player.AirDashDirection < 0);
+        return forward ? AirdashForwardAnim : AirdashBackAnim;
     }
 
     // Picks forward vs backward walk based on whether we're moving toward the opponent.
@@ -290,25 +433,29 @@ public partial class PlayerAnimator : Node3D
         PlayClip(PickAnim());
     }
 
-    // Plays a one-shot transition clip and arms the tick countdown for its length.
-    protected virtual void PlayTransition(string anim)
+    // Plays a one-shot transition clip, arms the tick countdown for its length, and records the
+    // priority needed to cancel it early.
+    protected virtual void PlayTransition(string anim, int cancelThreshold)
     {
         PlayClip(anim);
         Animation clip = animPlayer?.GetAnimation(anim);
         float length = clip?.Length ?? 0f;
         transitionTicksLeft = Mathf.Max(1, Mathf.CeilToInt(length / PlayerConstants.FixedDelta));
+        transitionCancelThreshold = cancelThreshold;
     }
 
-    protected virtual void PlayClip(string anim)
+    protected virtual void PlayClip(string anim, bool forceRestart = false)
     {
         if (animPlayer == null || string.IsNullOrEmpty(anim))
             return;
-        if (currentAnim == anim)
+        if (currentAnim == anim && !forceRestart)
             return; // already playing it, don't restart every frame
         if (!animPlayer.HasAnimation(anim))
             return; // clip not in the model; keep whatever is playing
 
         animPlayer.Play(anim, BlendTime);
+        if (forceRestart)
+            animPlayer.Seek(0.0, true); // replay from the top even if it's the same clip name
         currentAnim = anim;
     }
 

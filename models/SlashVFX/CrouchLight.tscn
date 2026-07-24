@@ -1,0 +1,18 @@
+[gd_scene format=3 uid="uid://bade6fmgkqvfx"]
+
+[ext_resource type="ArrayMesh" uid="uid://7dwcxxn4lkbq" path="res://models/SlashVFX/CrouchLight.obj" id="1_15aok"]
+[ext_resource type="Shader" uid="uid://b3ilrhxr7thy2" path="res://shaders/generic_smear.gdshader" id="2_hlpvk"]
+
+[sub_resource type="ShaderMaterial" id="ShaderMaterial_5hu28"]
+render_priority = 0
+shader = ExtResource("2_hlpvk")
+shader_parameter/flat_color = Color(0.9372549, 0.8235294, 0.7647059, 1)
+shader_parameter/opacity = 1.0
+shader_parameter/ortho_amount = 0.7
+shader_parameter/plane_distance = 4.0
+
+[node name="CrouchLight" type="Node3D" unique_id=557679341]
+
+[node name="CrouchLight" type="MeshInstance3D" parent="." unique_id=106600548]
+mesh = ExtResource("1_15aok")
+surface_material_override/0 = SubResource("ShaderMaterial_5hu28")

@@ -1,0 +1,20 @@
+[gd_scene format=3 uid="uid://bp15rp4ve7u3w"]
+
+[ext_resource type="ArrayMesh" uid="uid://b34ahc4chd6vr" path="res://models/SlashVFX/CrouchMedium.obj" id="1_5l26a"]
+[ext_resource type="Shader" uid="uid://d245h7gi2cco2" path="res://shaders/slash.gdshader" id="2_negdh"]
+[ext_resource type="Texture2D" uid="uid://c5xi11eafmqv3" path="res://models/CharacterModellingAttemp3_SlashTexture.png" id="3_g2tek"]
+
+[sub_resource type="ShaderMaterial" id="ShaderMaterial_negdh"]
+render_priority = 0
+shader = ExtResource("2_negdh")
+shader_parameter/slash_texture = ExtResource("3_g2tek")
+shader_parameter/opacity = 1.0
+shader_parameter/ortho_amount = 0.7
+shader_parameter/plane_distance = 4.0
+
+[node name="CrouchMedium" type="Node3D" unique_id=1409249213]
+transform = Transform3D(0.9, 0, 0, 0, 1, 0, 0, 0, 1, -0.5, 0, 0)
+
+[node name="CrouchMedium" type="MeshInstance3D" parent="." unique_id=997799069]
+mesh = ExtResource("1_5l26a")
+surface_material_override/0 = SubResource("ShaderMaterial_negdh")

@@ -52,7 +52,7 @@ environment = SubResource("Environment_s68cd")
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, -0.5975033, 0)
 
 [node name="CSGBox3D" type="CSGBox3D" parent="world/walls and floor" unique_id=1567150229]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, -0.49467695, 0)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.014403343, -0.49467647, -0.0009446144)
 size = Vector3(15, 0.5, 15)
 material = SubResource("ShaderMaterial_jr3p7")
 
@@ -77,7 +77,7 @@ script = ExtResource("2_jka67")
 [node name="Player" parent="MatchManager" unique_id=500866665 instance=ExtResource("4_jka67")]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -1.5, -0.8, 0)
 
-[node name="Player2" parent="MatchManager" unique_id=406601875 instance=ExtResource("4_jka67")]
+[node name="Player2" parent="MatchManager" unique_id=1229671468 instance=ExtResource("4_jka67")]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 1.5, -0.8, 0)
 PlayerNumber = 2
 

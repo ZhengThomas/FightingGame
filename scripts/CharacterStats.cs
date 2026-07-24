@@ -48,6 +48,8 @@ public record struct CharacterStats
     public float AirDashSpeed;
     public int AirDashStartup;
     public int AirDashDuration;
+    public int DashCooldown; // frames after leaving a ground dash / backdash before you can dash again
+    public int MinDashDuration; // minimum frames a ground dash must run before it can return to walk/idle
 
     // Knockdown / wakeup
     public int KnockdownDuration;
@@ -91,6 +93,8 @@ public record struct CharacterStats
         AirDashSpeed = 8f,
         AirDashStartup = 3,
         AirDashDuration = 7,
+        DashCooldown = 8,
+        MinDashDuration = 12,
 
         KnockdownDuration = 30,
         WakeupDuration = 25,

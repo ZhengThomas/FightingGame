@@ -1,0 +1,20 @@
+[gd_scene format=3 uid="uid://dt1d6igtbef7d"]
+
+[ext_resource type="ArrayMesh" uid="uid://ccxdhdiq0bjfc" path="res://models/SlashVFX/StandMedium.obj" id="1_rn4y3"]
+[ext_resource type="Shader" uid="uid://d245h7gi2cco2" path="res://shaders/slash.gdshader" id="2_jf3h0"]
+[ext_resource type="Texture2D" uid="uid://c5xi11eafmqv3" path="res://models/CharacterModellingAttemp3_SlashTexture.png" id="3_kf84k"]
+
+[sub_resource type="ShaderMaterial" id="ShaderMaterial_or8w8"]
+render_priority = 0
+shader = ExtResource("2_jf3h0")
+shader_parameter/slash_texture = ExtResource("3_kf84k")
+shader_parameter/opacity = 1.0
+shader_parameter/ortho_amount = 0.7
+shader_parameter/plane_distance = 4.0
+
+[node name="StandMedium" type="Node3D" unique_id=1575987241]
+transform = Transform3D(0.9, 0, 0, 0, 1, 0, 0, 0, 1, -0.5, 0, 0)
+
+[node name="StandMedium" type="MeshInstance3D" parent="." unique_id=1940671661]
+mesh = ExtResource("1_rn4y3")
+surface_material_override/0 = SubResource("ShaderMaterial_or8w8")

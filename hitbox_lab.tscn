@@ -1,0 +1,17 @@
+[gd_scene format=3 uid="uid://cejvr0ie7skre"]
+
+[ext_resource type="PackedScene" uid="uid://lfpeewpqnrfk" path="res://player.tscn" id="1_player"]
+[ext_resource type="Script" uid="uid://cydiie4iqvopl" path="res://scripts/HitboxGizmo.cs" id="2_gizmo"]
+[ext_resource type="Script" uid="uid://d0e1a3fi2g72e" path="res://scripts/EditorPose.cs" id="3_pose"]
+
+[node name="HitboxLab" type="Node3D" unique_id=492835694]
+
+[node name="Player" parent="." unique_id=500866665 instance=ExtResource("1_player")]
+
+[node name="EditorPose" type="Node3D" parent="Player" unique_id=492835695]
+script = ExtResource("3_pose")
+Animation = "StandLight"
+Frame = 6
+
+[node name="HitboxGizmo" type="Node3D" parent="Player" unique_id=2120891098]
+script = ExtResource("2_gizmo")

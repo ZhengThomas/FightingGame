@@ -51,7 +51,9 @@ public partial class DebugDraw : Node2D
             return persp;
 
         float t = anim.OrthoAmount;
-        float planeDistance = anim.PlaneDistance;
+        // plane_distance tracks the camera's distance to the fight plane (z = 0), matching what
+        // PlayerAnimator feeds the shader each frame; players sit on z = 0 so it's the camera's Z.
+        float planeDistance = camera.GlobalPosition.Z;
 
         // Depth = distance in front of the camera along its forward (-Z in camera space).
         Vector3 local = camera.GlobalTransform.AffineInverse() * world;
@@ -59,13 +61,15 @@ public partial class DebugDraw : Node2D
         if (depth <= 0.0001f || planeDistance <= 0.0001f)
             return persp; // behind camera / degenerate: nothing sensible to shift
 
-        // The shader blends perspective NDC-x with an orthographic NDC-x that swaps the point's
-        // real depth for a fixed plane_distance. In screen space that's a scale toward center:
-        //   final_x = center + (persp_x - center) * ((1 - t) + t * depth / planeDistance)
-        float cx = GetViewport().GetVisibleRect().Size.X * 0.5f;
+        // The shader blends perspective with an orthographic projection that swaps the point's
+        // real depth for a fixed plane_distance. In screen space that's a scale toward the screen
+        // center, applied to both axes (matches the shader doing x and y):
+        //   final = center + (persp - center) * ((1 - t) + t * depth / planeDistance)
+        Vector2 half = GetViewport().GetVisibleRect().Size * 0.5f;
         float factor = (1f - t) + t * (depth / planeDistance);
-        float x = cx + (persp.X - cx) * factor;
-        return new Vector2(x, persp.Y);
+        float x = half.X + (persp.X - half.X) * factor;
+        float y = half.Y + (persp.Y - half.Y) * factor;
+        return new Vector2(x, y);
     }
 
     PlayerAnimator GetAnimator(Player player)

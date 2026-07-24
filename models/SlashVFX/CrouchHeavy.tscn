@@ -1,0 +1,17 @@
+[gd_scene format=3 uid="uid://cxjkq4uw83ixy"]
+
+[ext_resource type="ArrayMesh" uid="uid://d01406lsoc6ei" path="res://models/SlashVFX/CrouchHeavy.obj" id="1_l25c3"]
+[ext_resource type="Shader" uid="uid://d245h7gi2cco2" path="res://shaders/slash.gdshader" id="2_efbxv"]
+[ext_resource type="Texture2D" uid="uid://c5xi11eafmqv3" path="res://models/CharacterModellingAttemp3_SlashTexture.png" id="3_gn6ta"]
+
+[sub_resource type="ShaderMaterial" id="ShaderMaterial_1a624"]
+render_priority = 0
+shader = ExtResource("2_efbxv")
+shader_parameter/slash_texture = ExtResource("3_gn6ta")
+shader_parameter/opacity = 1.0
+
+[node name="CrouchHeavy" type="Node3D" unique_id=1912509185]
+
+[node name="CrouchHeavy" type="MeshInstance3D" parent="." unique_id=1344022400]
+mesh = ExtResource("1_l25c3")
+surface_material_override/0 = SubResource("ShaderMaterial_1a624")

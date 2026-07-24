@@ -1,0 +1,25 @@
+[remap]
+
+importer="wavefront_obj"
+importer_version=1
+type="Mesh"
+uid="uid://rdrufg1vdc5v"
+path="res://.godot/imported/JumpLight.obj-4e31c906227fa91ca2ff50e0166c2468.mesh"
+
+[deps]
+
+files=["res://.godot/imported/JumpLight.obj-4e31c906227fa91ca2ff50e0166c2468.mesh"]
+
+source_file="res://models/SlashVFX/JumpLight.obj"
+dest_files=["res://.godot/imported/JumpLight.obj-4e31c906227fa91ca2ff50e0166c2468.mesh", "res://.godot/imported/JumpLight.obj-4e31c906227fa91ca2ff50e0166c2468.mesh"]
+
+[params]
+
+generate_tangents=true
+generate_lods=true
+generate_shadow_mesh=true
+generate_lightmap_uv2=false
+generate_lightmap_uv2_texel_size=0.2
+scale_mesh=Vector3(1, 1, 1)
+offset_mesh=Vector3(0, 0, 0)
+force_disable_mesh_compression=false
