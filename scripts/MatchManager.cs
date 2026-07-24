@@ -203,8 +203,8 @@ public partial class MatchManager : Node
 		{
 			if (!IsInHitPause)
 			{
-				Player1?.Tick(inputManager.InputBuffers[0]);
-				Player2?.Tick(inputManager.InputBuffers[1]);
+				Player1?.Tick();
+				Player2?.Tick();
 				EnforceStageBoundaries(); // do it twice to ensure nothing silly happens
 				ResolvePushboxCollision();
 				EnforceStageBoundaries();

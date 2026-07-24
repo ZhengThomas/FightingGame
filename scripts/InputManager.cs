@@ -18,6 +18,23 @@ public struct InputFrame
     public bool isDuringHitpause;
 }
 
+// Paired input + consumed history for one player. Same length/indexing.
+// Queries take this as `this` so callers don't pass Consumed separately.
+public struct InputHistory
+{
+    public InputFrame[] Buffer;
+    public InputFrame[] Consumed;
+
+    public InputFrame this[int i] => Buffer[i];
+    public int Length => Buffer.Length;
+
+    public static InputHistory Create(int size) => new InputHistory
+    {
+        Buffer = new InputFrame[size],
+        Consumed = new InputFrame[size],
+    };
+}
+
 public struct InputBindings
 {
     public Key Left, Right, Up, Down;
@@ -62,7 +79,7 @@ public struct ChargeInput
     public static readonly int MaxReleaseGap = 6;         // max frames of non-charge allowed between charge and release
 }
 
-// Static query helpers — operate on any InputFrame[] buffer, not tied to a specific player.
+// Static query helpers — operate on any InputHistory, not tied to a specific player.
 // This is rollback-friendly: the same logic runs whether the buffer came from hardware,
 // a network packet, or a saved snapshot.
 public static class InputQuery
@@ -70,12 +87,15 @@ public static class InputQuery
     // Returns the matched InputFrame if a button transitioned from unpressed to pressed within the last
     // bufferWindow non-hitpause frames, or null if no match. Callers can read Left/Right/etc. from the
     // returned frame to get input state at the exact moment of the press.
+    // A press already flagged in Consumed is ignored.
     public static InputFrame? WasJustPressed(
-        this InputFrame[] buffer, int bufferWindow,
+        this InputHistory inputs, int bufferWindow,
         Func<InputFrame, bool> pressedInput,
         Func<InputFrame, bool>[] heldInputs = null,
         Func<InputFrame, bool>[] notPressedInputs = null)
     {
+        var buffer = inputs.Buffer;
+        var consumed = inputs.Consumed;
         int i = 0;
         int nonHitpauseFramesSeen = 0;
 
@@ -94,6 +114,9 @@ public static class InputQuery
                 foreach (var btn in notPressedInputs)
                     if (btn(buffer[i])) { allPressedThisFrame = false; break; }
 
+            if (allPressedThisFrame && pressedInput(consumed[i]))
+                allPressedThisFrame = false;
+
             if (allPressedThisFrame && (i + 1 >= buffer.Length || !pressedInput(buffer[i + 1])))
                 return buffer[i];
 
@@ -105,9 +128,30 @@ public static class InputQuery
         return null;
     }
 
-    // True if all buttons were held simultaneously at any point in the last bufferWindow frames.
-    public static bool WasHeld(this InputFrame[] buffer, int bufferWindow, params Func<InputFrame, bool>[] buttons)
+    // Flag the most recent unconsumed rising edge of pressedInput in Consumed.
+    public static void MarkConsumed(
+        this InputHistory inputs, int bufferWindow,
+        Func<InputFrame, bool> pressedInput,
+        Func<InputFrame, InputFrame> mark)
     {
+        var buffer = inputs.Buffer;
+        var consumed = inputs.Consumed;
+
+        for (int i = 0; i < bufferWindow && i < buffer.Length; i++)
+        {
+            if (!pressedInput(buffer[i])) continue;
+            if (pressedInput(consumed[i])) continue;
+            if (i + 1 < buffer.Length && pressedInput(buffer[i + 1])) continue;
+
+            consumed[i] = mark(consumed[i]);
+            return;
+        }
+    }
+
+    // True if all buttons were held simultaneously at any point in the last bufferWindow frames.
+    public static bool WasHeld(this InputHistory inputs, int bufferWindow, params Func<InputFrame, bool>[] buttons)
+    {
+        var buffer = inputs.Buffer;
         for (int i = 0; i < bufferWindow; i++)
         {
             bool allHeld = true;
@@ -119,8 +163,9 @@ public static class InputQuery
     }
 
     // True if the directional sequence described by motion was performed recently.
-    public static bool WasMotion(this InputFrame[] buffer, bool facingRight, MotionInput motion, int startFrom = 0)
+    public static bool WasMotion(this InputHistory inputs, bool facingRight, MotionInput motion, int startFrom = 0)
     {
+        var buffer = inputs.Buffer;
         var seq = motion.Sequence;
         int lastFoundFrame = -1;
         int cheatableAmount = motion.CheatableAmount;
@@ -185,8 +230,9 @@ public static class InputQuery
     }
 
     // True if a charge input that was specified was performed recently
-    public static bool WasCharge(this InputFrame[] buffer, bool facingRight, ChargeInput charge)
+    public static bool WasCharge(this InputHistory inputs, bool facingRight, ChargeInput charge)
     {
+        var buffer = inputs.Buffer;
         // Step 1: find the most recent frame with any release direction within ReleaseWindow.
         // Hitpause doesnt count down the buffer window for the last input of the motion input, for game feel
         int release = -1;
@@ -318,11 +364,6 @@ public partial class InputManager : Node
 {
     public const int BufferSize = 60;
 
-    // Per-player input buffers: index 0 = Player 1, index 1 = Player 2.
-    // For rollback: inject a recorded InputFrame into the appropriate buffer slot
-    // before calling Tick to replay that frame.
-    public InputFrame[][] InputBuffers = new InputFrame[2][];
-
     static readonly InputBindings P1Bindings = new InputBindings
     {
         Left = Key.Left,
@@ -354,8 +395,6 @@ public partial class InputManager : Node
 
     public override void _Ready()
     {
-        InputBuffers[0] = new InputFrame[BufferSize];
-        InputBuffers[1] = new InputFrame[BufferSize];
         debug = GetNode<DebugManager>("/root/DebugManager");
         match = GetNode<MatchManager>("/root/MatchManager");
     }
@@ -363,16 +402,24 @@ public partial class InputManager : Node
     public override void _PhysicsProcess(double delta)
     {
         if (!debug.ShouldTick) return;
-        ReadPlayerInput(0, P1Bindings);
-        ReadPlayerInput(1, P2Bindings);
+        ReadPlayerInput(match.Player1, P1Bindings);
+        ReadPlayerInput(match.Player2, P2Bindings);
     }
 
-    private void ReadPlayerInput(int playerIndex, InputBindings bindings)
+    private void ReadPlayerInput(Player player, InputBindings bindings)
     {
-        var buffer = InputBuffers[playerIndex];
+        if (player == null) return;
 
+        var buffer = player.Inputs.Buffer;
+        var consumed = player.Inputs.Consumed;
+
+        // Keep both buffers aligned — consumed shifts with input every frame.
         for (int i = BufferSize - 1; i > 0; i--)
+        {
             buffer[i] = buffer[i - 1];
+            consumed[i] = consumed[i - 1];
+        }
+        consumed[0] = default;
 
         bool left  = Input.IsKeyPressed(bindings.Left);
         bool right = Input.IsKeyPressed(bindings.Right);
