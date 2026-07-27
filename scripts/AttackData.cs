@@ -47,6 +47,14 @@ public class MoveData
 
     // slash VFX to fade in/out over this move's frames (default ScenePath = "" = none)
     public VfxCue Vfx;
+
+    // If true, landing from the resulting air hitstun goes to hard Knockdown+Wakeup.
+    // Otherwise (default) they soft-knockdown and stand up quickly. Shared by normals and throws.
+    public bool CausesHardKnockdown;
+
+    // How many steps to advance on each ComboScaling table after this hit connects.
+    public int DamageProrationSteps = 1;
+    public int HitstunProrationSteps = 1;
 }
 
 // Data for a normal (non-grab) attack.

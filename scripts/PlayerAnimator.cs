@@ -25,7 +25,8 @@ public partial class PlayerAnimator : Node3D
     [Export] public string HurtAnim = "StandingHurtEnd";        // grounded hitstun
     [Export] public string AirHurtRiseAnim = "LaunchingHurt";   // airborne hitstun, rising
     [Export] public string AirHurtFallAnim = "FallingHurt";     // airborne hitstun, falling
-    [Export] public string KnockdownAnim = "HardKnockdown";     // landing from hurt is always a hard knockdown
+    [Export] public string SoftKnockdownAnim = "SoftKnockdown"; // short KD (placeholder until a soft clip exists)
+    [Export] public string KnockdownAnim = "HardKnockdown";     // hard knockdown lie-down
     [Export] public string BlockAnim = "StandBlockEnd";         // standing blockstun
     [Export] public string CrouchBlockAnim = "CrouchBlockEnd";  // crouch blockstun
     [Export] public string AirBlockAnim = "IntoFalling";        // air blockstun (placeholder: no air-block clip yet)
@@ -71,6 +72,8 @@ public partial class PlayerAnimator : Node3D
     protected PlayerState prevState;
     // Id of the attack that was active last tick.
     protected int lastMoveId = -1;
+    // Last seen Player.ReactionFlashId — used to restart hurt/block clips on re-hit.
+    protected int lastReactionFlashId = -1;
     protected int transitionTicksLeft;
     // While a one-shot transition is playing, a state change only cuts it short if the incoming
     // state's priority is >= this threshold. Locomotion sits below every threshold, so wandering
@@ -135,6 +138,7 @@ public partial class PlayerAnimator : Node3D
             ForceNoLoop(HurtAnim);
             ForceNoLoop(AirHurtRiseAnim);
             ForceNoLoop(AirHurtFallAnim);
+            ForceNoLoop(SoftKnockdownAnim);
             ForceNoLoop(KnockdownAnim);
             ForceNoLoop(BlockAnim);
             ForceNoLoop(CrouchBlockAnim);
@@ -304,6 +308,7 @@ public partial class PlayerAnimator : Node3D
         PlayerState state = player.CurrentState;
         int moveId = player.IsAttacking() ? (player.CurrentMove?.Id ?? -1) : -1;
         bool newMove = moveId != -1 && moveId != lastMoveId;
+        bool newReaction = player.ReactionFlashId != lastReactionFlashId && IsReactionState(state);
         bool startedClip = false;
 
         if (state != prevState)
@@ -330,6 +335,13 @@ public partial class PlayerAnimator : Node3D
             PlayClip(PickAnim(), forceRestart: true);
             startedClip = true;
         }
+        else if (newReaction)
+        {
+            // Re-hit / re-block while already in that reaction state (common in air juggles).
+            transitionTicksLeft = 0;
+            PlayClip(PickAnim(), forceRestart: true);
+            startedClip = true;
+        }
 
         if (!startedClip)
         {
@@ -349,7 +361,15 @@ public partial class PlayerAnimator : Node3D
 
         prevState = state;
         lastMoveId = moveId;
+        lastReactionFlashId = player.ReactionFlashId;
     }
+
+    protected static bool IsReactionState(PlayerState state)
+        => state == PlayerState.Hitstun
+        || state == PlayerState.AirHitstun
+        || state == PlayerState.Blockstun
+        || state == PlayerState.CrouchBlockstun
+        || state == PlayerState.AirBlockstun;
 
     // The one-shot clip to play for a state change (plus what it takes to cancel it early), or null
     // if the switch is instant. Exit transitions use PriorityAction so idle<->walk won't cancel them
@@ -397,6 +417,7 @@ public partial class PlayerAnimator : Node3D
             PlayerState.Landing          => LandingAnim,
             PlayerState.Hitstun          => HurtAnim,
             PlayerState.AirHitstun       => player.Physics.VelocityY > 0f ? AirHurtRiseAnim : AirHurtFallAnim,
+            PlayerState.SoftKnockdown    => SoftKnockdownAnim,
             PlayerState.Knockdown        => KnockdownAnim,
             PlayerState.Wakeup           => WakeupAnim,
             PlayerState.Blockstun        => BlockAnim,
@@ -444,7 +465,7 @@ public partial class PlayerAnimator : Node3D
         transitionCancelThreshold = cancelThreshold;
     }
 
-    protected virtual void PlayClip(string anim, bool forceRestart = false)
+    protected virtual void PlayClip(string anim, bool forceRestart = false, float? blendOverride = null)
     {
         if (animPlayer == null || string.IsNullOrEmpty(anim))
             return;
@@ -453,9 +474,11 @@ public partial class PlayerAnimator : Node3D
         if (!animPlayer.HasAnimation(anim))
             return; // clip not in the model; keep whatever is playing
 
-        animPlayer.Play(anim, BlendTime);
-        if (forceRestart)
-            animPlayer.Seek(0.0, true); // replay from the top even if it's the same clip name
+        // Hit/block reactions snap with no crossfade so frame 1 reads immediately.
+        float blend = blendOverride ?? (IsReactionState(player.CurrentState) ? 0f : BlendTime);
+        animPlayer.Play(anim, blend);
+        if (forceRestart || blend <= 0f)
+            animPlayer.Seek(0.0, true); // hard cut to the start of the clip
         currentAnim = anim;
     }
 

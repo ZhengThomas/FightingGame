@@ -14,6 +14,7 @@ public static class Moveset
         BlockStun = 8,
         Pushback = 4f,
         LaunchForce = 3f,
+        HitstunProrationSteps = 0,
         HitboxesPerFrame =
         [
             [new Box { X = 0.6f, Y = 0.5f, Width = 0.6f, Height = 0.3f }]
@@ -37,6 +38,7 @@ public static class Moveset
         BlockStun = 8,
         Pushback = 4f,
         LaunchForce = 3f,
+        HitstunProrationSteps = 0,
         HitboxesPerFrame = [
             [new Box { X = 0.7f, Y = 0.9f, Width = 0.6f, Height = 0.3f }]
         ],
@@ -238,6 +240,7 @@ public static class Moveset
             [new Box { X = 0.6f, Y = 0.9f, Width = 0.5f, Height = 1.8f }]
         ],
         Strength = MoveType.Grab,
+        CausesHardKnockdown = true,
         GrabSequenceDuration = 65,
         DefenderSnapOffsetX = 1f,
         DefenderSnapOffsetY = 0f,
@@ -254,6 +257,7 @@ public static class Moveset
             [new Box { X = 0.6f, Y = 0.9f, Width = 0.5f, Height = 1.8f }]
         ],
         Strength = MoveType.Grab,
+        CausesHardKnockdown = true,
         GrabSequenceDuration = 65,
         DefenderSnapOffsetX = 1f,
         DefenderSnapOffsetY = 0f,

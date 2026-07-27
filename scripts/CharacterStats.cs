@@ -46,14 +46,18 @@ public record struct CharacterStats
     public int BackDashRecoverDuration;
     public int BackDashDuration;
     public float AirDashSpeed;
+    public float AirDashFinishSpeed;
     public int AirDashStartup;
     public int AirDashDuration;
+    public int AirDashRecovery;
     public int DashCooldown; // frames after leaving a ground dash / backdash before you can dash again
     public int MinDashDuration; // minimum frames a ground dash must run before it can return to walk/idle
 
     // Knockdown / wakeup
-    public int KnockdownDuration;
-    public int WakeupDuration;
+    public int SoftKnockdownDuration; // short grounded recover after a normal air hit lands
+    public float SoftKnockdownSlideSpeed; // constant retreat speed while soft-knocked down
+    public int KnockdownDuration;     // hard knockdown lie-down
+    public int WakeupDuration;        // hard knockdown get-up (invulnerable)
 
     // The baseline character. Matches the values that used to live in PlayerConstants.
     public static CharacterStats Default => new CharacterStats
@@ -65,7 +69,7 @@ public record struct CharacterStats
         StrongDecelerationThreshold = 2.5f,
 
         JumpForce = 15f,
-        DoubleJumpForce = 11f,
+        DoubleJumpForce = 12f,
         WalkJumpSpeed = 2.3f,
         DashJumpSpeed = 4.5f,
         JumpSquatDuration = 4,
@@ -90,12 +94,16 @@ public record struct CharacterStats
         BackDashStartDuration = 3,
         BackDashRecoverDuration = 10,
         BackDashDuration = 7,
-        AirDashSpeed = 8f,
-        AirDashStartup = 3,
+        AirDashSpeed = 12f,
+        AirDashFinishSpeed = 5f,
+        AirDashStartup = 5,
         AirDashDuration = 7,
+        AirDashRecovery = 3,
         DashCooldown = 8,
         MinDashDuration = 12,
 
+        SoftKnockdownDuration = 20,
+        SoftKnockdownSlideSpeed = 5f,
         KnockdownDuration = 30,
         WakeupDuration = 25,
     };

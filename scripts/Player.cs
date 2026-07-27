@@ -126,8 +126,9 @@ public enum PlayerState
     CrouchAttacking,
     Hitstun,        // grounded hit reaction
     AirHitstun,     // airborne hit reaction / juggle
-    Knockdown,      // lying on the ground after a hard knockdown or landing from AirHitstun
-    Wakeup,         // rising animation before returning to Idle
+    SoftKnockdown,  // short grounded recover after landing from AirHitstun (default)
+    Knockdown,      // hard knockdown lie-down (throws / flagged moves)
+    Wakeup,         // rising animation after hard Knockdown before returning to Idle
     Blockstun,      // in blockstun after blocking an attack
     CrouchBlockstun,
     AirBlockstun,
@@ -156,9 +157,11 @@ public struct FrameTimer
 public struct HitReactionState
 {
     public FrameTimer Timer;
-    public float GravityMultiplier;
-    public float hitstunMultiplier;
-    public float damageMultiplier;
+    // Indices into ComboScaling tables for the next hit (0 = first hit of the combo).
+    public int DamageScaleIndex;
+    public int HitstunScaleIndex;
+    // Gravity scale in thousandths from the last connecting hit (1000 = normal).
+    public int GravityScale;
     public bool HardKnockdown;
 }
 
@@ -207,6 +210,9 @@ public partial class Player : Node3D
     public ActiveMove CurrentMove => currentMove;
     public PhysicsState Physics => physics;
     public int AirDashDirection => jump.AirDashDirection; // +1/-1, the locked-in airdash direction
+    // Bumped every hit/block so the animator can replay reaction clips on re-hit in the same state.
+    // Snapshotted for rollback; visuals poll this instead of listening to transition events.
+    public int ReactionFlashId => reactionFlashId;
     BackdashState backdashInfo = new BackdashState{ BackDashFrame = -1 };
     int dashCooldown = 0; // counts down each tick; while > 0, forward dash and backdash are blocked
     int groundDashFrame = -1; // ticks spent in the current ground dash (-1 = not dashing); gates the walk/idle exit
@@ -216,6 +222,7 @@ public partial class Player : Node3D
     Player grabPartner = null; // the other player during GrabHit / HitByGrab
     MatchManager Match;
     public bool SuppressGravity = false;
+    int reactionFlashId;
 
     List<Move> moveList;
     public Box Pushbox = new Box { X = 0, Y = 0.7f, Width = 0.6f, Height = 1.8f };
@@ -348,15 +355,28 @@ public partial class Player : Node3D
             return true;
         }
 
-        // If its the first time we are getting hit, we reset the hitstun state
+        // If its the first time we are getting hit, we reset combo scaling.
         if (!IsHurt())
         {
-            hitReaction.GravityMultiplier = 1;
-            hitReaction.hitstunMultiplier = 1;
-            hitReaction.damageMultiplier = 1;
+            hitReaction.DamageScaleIndex = 0;
+            hitReaction.HitstunScaleIndex = 0;
+            hitReaction.GravityScale = ComboScaling.ScaleUnit;
+            hitReaction.HardKnockdown = false;
         }
 
-        hitReaction.Timer.Duration = data.HitStun > 0 ? data.HitStun : 15;
+        int hitstunScale = ComboScaling.Sample(ComboScaling.HitstunScale, hitReaction.HitstunScaleIndex);
+        hitReaction.GravityScale = ComboScaling.GravityFromHitstun(hitstunScale);
+
+        int baseHitstun = data.HitStun > 0 ? data.HitStun : 15;
+        hitReaction.Timer.Duration = ComboScaling.Apply(baseHitstun, hitstunScale);
+        // Damage when health exists:
+        //   ComboScaling.Apply(data.Damage, ComboScaling.Sample(ComboScaling.DamageScale, hitReaction.DamageScaleIndex))
+        // Last hit wins: only moves tagged CausesHardKnockdown force the long KD on landing.
+        hitReaction.HardKnockdown = data.CausesHardKnockdown;
+        reactionFlashId++;
+
+        hitReaction.DamageScaleIndex += data.DamageProrationSteps;
+        hitReaction.HitstunScaleIndex += data.HitstunProrationSteps;
 
         float pushX = data.Pushback * direction;
         physics.VelocityX = 0;
@@ -378,6 +398,7 @@ public partial class Player : Node3D
     public virtual void BlockAttack(AttackData data, int direction)
     {
         blockReaction.Timer.Duration = data.BlockStun > 0 ? data.BlockStun : 15;
+        reactionFlashId++;
         float push = data.PushbackOnBlock == 0 ? data.Pushback : data.PushbackOnBlock;
         physics.VelocityX = 0;
         physics.PushbackVelocityX = push * direction;
@@ -453,6 +474,7 @@ public partial class Player : Node3D
     {
         return currentState == PlayerState.Hitstun
             || currentState == PlayerState.AirHitstun
+            || currentState == PlayerState.SoftKnockdown
             || currentState == PlayerState.Knockdown
             || currentState == PlayerState.Wakeup;
     }
@@ -549,6 +571,7 @@ public partial class Player : Node3D
 
         grabPartner = attacker;
         grabSequence.Timer.Duration = grabData.GrabSequenceDuration;
+        hitReaction.HardKnockdown = grabData.CausesHardKnockdown;
 
         TransitionTo(PlayerState.HitByGrab);
     }
@@ -617,8 +640,10 @@ public partial class Player : Node3D
     }
     public virtual List<Box> GetCurrentHurtboxes()
     {
-        // Were immortal if were in the middle of waking up
-        if (currentState == PlayerState.Wakeup)
+        // Invulnerable while knocked down / waking up
+        if (currentState == PlayerState.SoftKnockdown
+            || currentState == PlayerState.Knockdown
+            || currentState == PlayerState.Wakeup)
         {
             return emptyBoxList;
         }
@@ -626,11 +651,6 @@ public partial class Player : Node3D
         if (currentState == PlayerState.GrabHit || currentState == PlayerState.HitByGrab)
         {
             return emptyBoxList;
-        }
-        // and were "crouching" if were lying on the ground
-        if (currentState == PlayerState.Knockdown)
-        {
-            return CrouchingHurtbox;
         }
         // If were attacking, its based on our attack
         if (IsAttacking() && currentMove != null)
@@ -658,6 +678,7 @@ public partial class Player : Node3D
             currentState == PlayerState.StandAttacking ||
             currentState == PlayerState.CrouchAttacking ||
             currentState == PlayerState.GrabOccurring ||
+            currentState == PlayerState.SoftKnockdown ||
             currentState == PlayerState.Knockdown || 
             currentState == PlayerState.Wakeup)
             && !forceOverride)
@@ -799,12 +820,15 @@ public partial class Player : Node3D
         if (!hurt && jump.CurrentJumpType == JumpType.Combo)
             floating = Stats.ComboFloatingGravity;
 
+        // GravityScale is thousandths (1000 = 1x); multiply then divide keeps the scale integer.
+        int grav = hurt ? hitReaction.GravityScale : ComboScaling.ScaleUnit;
+
         if (Math.Abs(physics.VelocityY) <= Stats.FloatingGravityThreshold)
-            physics.VelocityY -= floating;
+            physics.VelocityY -= floating * grav / ComboScaling.ScaleUnit;
         else if (physics.VelocityY >= 0)
-            physics.VelocityY -= rising;
+            physics.VelocityY -= rising * grav / ComboScaling.ScaleUnit;
         else
-            physics.VelocityY -= falling;
+            physics.VelocityY -= falling * grav / ComboScaling.ScaleUnit;
 
         if (physics.VelocityY < Stats.MaxFallSpeed)
             physics.VelocityY = Stats.MaxFallSpeed;
@@ -855,6 +879,9 @@ public partial class Player : Node3D
                 break;
             case PlayerState.AirHitstun:
                 HandleAirHitstunState();
+                break;
+            case PlayerState.SoftKnockdown:
+                HandleSoftKnockdownState();
                 break;
             case PlayerState.Knockdown:
                 HandleKnockdownState();
@@ -944,6 +971,7 @@ public partial class Player : Node3D
         {
             grabPartner.SetVelocity(3f * (int)GetFacing(), 9f);
             grabPartner.hitReaction.Timer.Duration = 100; // They get "hit" by the grab and are sent flying ish
+            // HardKnockdown was already set from GrabData in GetGrabbed.
             // this will be custom for each character, but rn im lazy and this is simple and sounds right
             grabPartner.TransitionTo(PlayerState.AirHitstun);
         }
@@ -1091,7 +1119,6 @@ public partial class Player : Node3D
                 jump.HasAirdash = false;
                 jump.AirdashFrame = 0;
                 jump.CurrentJumpType = currentMove.Blocked ? JumpType.Normal : JumpType.Combo;
-                updateFacing(true); 
                 TransitionTo(PlayerState.Airdashing);
                 return;
             }
@@ -1122,10 +1149,21 @@ public partial class Player : Node3D
 
     protected virtual void HandleAirHitstunState()
     {
-        // Gravity is applied by ApplyGravity; landing is caught by ResolveFloorCollision -> Knockdown
+        // No air recovery — stay hurt until ResolveFloorCollision lands you into soft/hard KD.
+        // Gravity is applied by ApplyGravity.
         AirHitDecelerate();
+    }
+
+    protected virtual void HandleSoftKnockdownState()
+    {
+        // Constant slide away from the opponent (facing was locked toward them on entry).
+        physics.VelocityX = GetFacing() == FacingDirection.Right
+            ? -Stats.SoftKnockdownSlideSpeed
+            : Stats.SoftKnockdownSlideSpeed;
+        physics.VelocityY = 0;
+        ClearPushbackVelocity();
         if (hitReaction.Timer.Advance())
-            TransitionTo(PlayerState.Jumping);
+            TransitionTo(PlayerState.Idle);
     }
 
     protected virtual void HandleKnockdownState()
@@ -1159,8 +1197,8 @@ public partial class Player : Node3D
         jump.AirdashFrame++;
         HandleAirdashMovement();
 
-        int totalAirdashDuration = Stats.AirDashDuration + Stats.AirDashStartup;
-        if(jump.AirdashFrame > totalAirdashDuration)
+        int totalAirdashDuration = Stats.AirDashStartup + Stats.AirDashDuration + Stats.AirDashRecovery;
+        if (jump.AirdashFrame > totalAirdashDuration)
         {
             jump.AirdashFrame = -1;
             TransitionTo(PlayerState.Jumping);
@@ -1340,7 +1378,6 @@ public partial class Player : Node3D
                 : (GetFacing() == FacingDirection.Right ? -1 : 1);
             jump.HasAirdash = false;
             jump.AirdashFrame = 0;
-            updateFacing(true); 
             TransitionTo(PlayerState.Airdashing);
         }
         // landing state transition is handled by the ResolveFloorCollision function
@@ -1414,6 +1451,16 @@ public partial class Player : Node3D
             grabSequence.Timer.Frame = 0;
         if (newState == PlayerState.Hitstun || newState == PlayerState.AirHitstun)
             hitReaction.Timer.Frame = 0;
+        if (newState == PlayerState.SoftKnockdown)
+        {
+            hitReaction.Timer.Start(Stats.SoftKnockdownDuration);
+            updateFacing(true); // snap toward the opponent, then lock for the slide
+            ClearPushbackVelocity();
+            physics.VelocityX = GetFacing() == FacingDirection.Right
+                ? -Stats.SoftKnockdownSlideSpeed
+                : Stats.SoftKnockdownSlideSpeed;
+            physics.VelocityY = 0;
+        }
         if (newState == PlayerState.Knockdown)
             hitReaction.Timer.Start(Stats.KnockdownDuration);
         if (newState == PlayerState.Wakeup)
@@ -1464,13 +1511,19 @@ public partial class Player : Node3D
     protected virtual void HandleAirdashMovement()
     {
         ClearPushbackVelocity();
-        if(jump.AirdashFrame <= Stats.AirDashStartup)
+        int activeEnd = Stats.AirDashStartup + Stats.AirDashDuration;
+        if (jump.AirdashFrame <= Stats.AirDashStartup)
         {
             physics.VelocityX = 0;
         }
-        else
+        else if (jump.AirdashFrame <= activeEnd)
         {
             physics.VelocityX = Stats.AirDashSpeed * jump.AirDashDirection;
+        }
+        else
+        {
+            // Recovery: still in airdash state, but at the lower finish speed.
+            physics.VelocityX = Stats.AirDashFinishSpeed * jump.AirDashDirection;
         }
         physics.VelocityY = 0;
     }
@@ -1592,7 +1645,7 @@ public partial class Player : Node3D
                 jump.HasAirdash = true;
                 jump.FramesSinceLastJump = 0;
                 if (currentState == PlayerState.AirHitstun)
-                    TransitionTo(PlayerState.Knockdown);
+                    TransitionTo(hitReaction.HardKnockdown ? PlayerState.Knockdown : PlayerState.SoftKnockdown);
                 else if (currentState == PlayerState.AirBlockstun)
                 {
                     TransitionTo(PlayerState.Landing);
