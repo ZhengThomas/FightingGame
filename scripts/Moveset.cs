@@ -12,8 +12,8 @@ public static class Moveset
         Damage = 30,
         HitStun = 12,
         BlockStun = 8,
-        Pushback = 4f,
-        LaunchForce = 3f,
+        Pushback = 667,
+        LaunchForce = 500,
         HitstunProrationSteps = 0,
         HitboxesPerFrame =
         [
@@ -36,8 +36,8 @@ public static class Moveset
         Damage = 25,
         HitStun = 10,
         BlockStun = 8,
-        Pushback = 4f,
-        LaunchForce = 3f,
+        Pushback = 667,
+        LaunchForce = 500,
         HitstunProrationSteps = 0,
         HitboxesPerFrame = [
             [new Box { X = 0.7f, Y = 0.9f, Width = 0.6f, Height = 0.3f }]
@@ -59,8 +59,8 @@ public static class Moveset
         Damage = 25,
         HitStun = 10,
         BlockStun = 8,
-        Pushback = 3f,
-        LaunchForce = 3f,
+        Pushback = 500,
+        LaunchForce = 500,
         HitboxesPerFrame = [
             [new Box { X = 0.9f, Y = 1.7f, Width = 0.7f, Height = 0.7f }]
         ],
@@ -81,8 +81,8 @@ public static class Moveset
         Damage = 70,
         HitStun = 18,
         BlockStun = 10,
-        Pushback = 4f,
-        LaunchForce = 6f,
+        Pushback = 667,
+        LaunchForce = 1000,
         HitboxesPerFrame =
         [
             [new Box { X = 1.1f, Y = 1.05f, Width = 2.3f, Height = 0.7f }]
@@ -104,8 +104,8 @@ public static class Moveset
         Damage = 60,
         HitStun = 15,
         BlockStun = 10,
-        Pushback = 4f,
-        LaunchForce = 4f,
+        Pushback = 667,
+        LaunchForce = 667,
         HitboxesPerFrame = [
             [new Box { X = 0.8f, Y = 0.35f, Width = 2.9f, Height = 0.5f }]
         ],
@@ -126,8 +126,8 @@ public static class Moveset
         Damage = 60,
         HitStun = 15,
         BlockStun = 14,
-        Pushback = 5f,
-        LaunchForce = 5f,
+        Pushback = 833,
+        LaunchForce = 833,
         HitboxesPerFrame = [
             [new Box { X = 0f, Y = 0.5f, Width = 2.5f, Height = 1.5f }]
         ],
@@ -148,8 +148,8 @@ public static class Moveset
         Damage = 100,
         HitStun = 20,
         BlockStun = 180,
-        Pushback = 5f,
-        LaunchForce = 5f,
+        Pushback = 833,
+        LaunchForce = 833,
         HitboxesPerFrame =
         [
             [new Box { X = 1.05f, Y = 1.18f, Width = 2.42f, Height = 1.1f }]
@@ -171,9 +171,8 @@ public static class Moveset
         Damage = 80,
         HitStun = 30,
         BlockStun = 14,
-        Pushback = 3f,
-        LaunchForce = 12f,
-        LaunchForceOnBlock = 4f,
+        Pushback = 500,
+        LaunchForce = 2000,
         HitboxesPerFrame = [
             [new Box { X = 0.5f, Y = 1.6f, Width = 1.3f, Height = 2.5f }]
         ],
@@ -197,10 +196,9 @@ public static class Moveset
         Damage = 100,
         HitStun = 30,
         BlockStun = 20,
-        Pushback = 4f,
-        LaunchForce = 4f,
-        PushbackOnBlock = 4f,
-        LaunchForceOnBlock = 4f,
+        Pushback = 667,
+        LaunchForce = 667,
+        PushbackOnBlock = 667,
         HitboxesPerFrame = [
             [new Box { X = 0.68f, Y = 0.75f, Width = 1.8f, Height = 1.55f }]
         ],

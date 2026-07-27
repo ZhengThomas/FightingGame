@@ -7,8 +7,10 @@ using System.Diagnostics;
 // Expand this as rollback needs grow (velocities, player states, health, etc.)
 public struct GameState
 {
-    public Vector3 P1Position;
-    public Vector3 P2Position;
+    public int P1SimX;
+    public int P1SimY;
+    public int P2SimX;
+    public int P2SimY;
 }
 
 public partial class MatchManager : Node
@@ -23,8 +25,10 @@ public partial class MatchManager : Node
     {
         stateHistory[stateHistoryHead] = new GameState
         {
-            P1Position = Player1?.Position ?? Vector3.Zero,
-            P2Position = Player2?.Position ?? Vector3.Zero,
+            P1SimX = Player1?.SimX ?? 0,
+            P1SimY = Player1?.SimY ?? 0,
+            P2SimX = Player2?.SimX ?? 0,
+            P2SimY = Player2?.SimY ?? 0,
         };
         stateHistoryHead = (stateHistoryHead + 1) % StateHistorySize;
     }
@@ -36,20 +40,20 @@ public partial class MatchManager : Node
         return stateHistory[index];
     }
 
-    public Vector3 GetHistoricalPosition(Player player, int framesAgo)
+    public (int attackerX, int defenderX) GetHistoricalSimX(Player attacker, Player defender, int framesAgo)
     {
         GameState state = GetGameState(framesAgo);
-        if (player == Player1) return state.P1Position;
-        if (player == Player2) return state.P2Position;
-        return Vector3.Zero;
+        int ax = attacker == Player1 ? state.P1SimX : state.P2SimX;
+        int dx = defender == Player1 ? state.P1SimX : state.P2SimX;
+        return (ax, dx);
     }
 
     public Player Player1 { get; private set; }
     public Player Player2 { get; private set; }
     public int FrameCount { get; private set; } = 0;
 	public DebugDraw DebugDraw { get; private set; }
-	public float p1xLastFrame { get; private set; } = -1.5f;
-	public float p2xLastFrame { get; private set; } = 1.5f;
+	public int p1xLastFrame { get; private set; } = PlayerConstants.ToSim(-1.5f);
+	public int p2xLastFrame { get; private set; } = PlayerConstants.ToSim(1.5f);
 	int hitPauseFramesRemaining = 0;
 	public const int DefaultHitstopDurationLight = 4;
 	public const int DefaultHitstopDurationMedium = 7;
@@ -107,115 +111,115 @@ public partial class MatchManager : Node
         else Player2 = player;
     }
 
+	private static void BoxExtents(int originX, int originY, Box box, out int left, out int right, out int bottom, out int top)
+	{
+		int x = originX + PlayerConstants.ToSim(box.X);
+		int y = originY + PlayerConstants.ToSim(box.Y);
+		int halfW = PlayerConstants.ToSim(box.Width) / 2;
+		int halfH = PlayerConstants.ToSim(box.Height) / 2;
+		left = x - halfW;
+		right = x + halfW;
+		bottom = y - halfH;
+		top = y + halfH;
+	}
+
 	private void ResolvePushboxCollision()
 	{
 		if (Player1 == null || Player2 == null) return;
 
-		float p1Left   = Player1.Position.X + Player1.Pushbox.X - Player1.Pushbox.Width  / 2;
-		float p1Right  = Player1.Position.X + Player1.Pushbox.X + Player1.Pushbox.Width  / 2;
-		float p1Bottom = Player1.Position.Y + Player1.Pushbox.Y - Player1.Pushbox.Height / 2;
-		float p1Top    = Player1.Position.Y + Player1.Pushbox.Y + Player1.Pushbox.Height / 2;
-
-		float p2Left   = Player2.Position.X + Player2.Pushbox.X - Player2.Pushbox.Width  / 2;
-		float p2Right  = Player2.Position.X + Player2.Pushbox.X + Player2.Pushbox.Width  / 2;
-		float p2Bottom = Player2.Position.Y + Player2.Pushbox.Y - Player2.Pushbox.Height / 2;
-		float p2Top    = Player2.Position.Y + Player2.Pushbox.Y + Player2.Pushbox.Height / 2;
+		BoxExtents(Player1.SimX, Player1.SimY, Player1.Pushbox, out int p1Left, out int p1Right, out int p1Bottom, out int p1Top);
+		BoxExtents(Player2.SimX, Player2.SimY, Player2.Pushbox, out int p2Left, out int p2Right, out int p2Bottom, out int p2Top);
 
 		bool horizontalOverlap = p1Right > p2Left && p1Left < p2Right;
 		bool verticalOverlap   = p1Top   > p2Bottom && p1Bottom < p2Top;
 
 		if (horizontalOverlap && verticalOverlap)
 		{
-			float overlap = Player1.Position.X < Player2.Position.X 
-				? p1Right - p2Left 
+			int overlap = Player1.SimX < Player2.SimX
+				? p1Right - p2Left
 				: p2Right - p1Left;
 
-			float push = Math.Min(overlap / 2, PlayerConstants.MaxPushboxCorrectionPerFrame);
+			int push = Math.Min(overlap / 2, PlayerConstants.MaxPushboxCorrectionPerFrame);
 
-			// figure out who is on which side
-			bool p1IsLeft = Player1.Position.X < Player2.Position.X || (Player1.Position.X == Player2.Position.X && p1xLastFrame < p2xLastFrame);
+			bool p1IsLeft = Player1.SimX < Player2.SimX || (Player1.SimX == Player2.SimX && p1xLastFrame < p2xLastFrame);
 
 			if (p1IsLeft)
 			{
-				Player1.Position = new Vector3(Player1.Position.X - push, Player1.Position.Y, Player1.Position.Z);
-				Player2.Position = new Vector3(Player2.Position.X + push, Player2.Position.Y, Player2.Position.Z);
+				Player1.SimX -= push;
+				Player2.SimX += push;
 			}
 			else
 			{
-				Player1.Position = new Vector3(Player1.Position.X + push, Player1.Position.Y, Player1.Position.Z);
-				Player2.Position = new Vector3(Player2.Position.X - push, Player2.Position.Y, Player2.Position.Z);
+				Player1.SimX += push;
+				Player2.SimX -= push;
 			}
+			Player1.SyncVisualPosition();
+			Player2.SyncVisualPosition();
 		}
 
-		// Hard clamp, if there is a vertical overlap, we make sure that player1 and player2 never pass eachother
-		// This is done by instead just freezing their x position back to what they were last frame if they do pass eachother
-		
 		if (verticalOverlap)
 		{
 			bool p1ShouldBeLeft = p1xLastFrame < p2xLastFrame;
-			bool p1IsLeft = Player1.Position.X < Player2.Position.X;
+			bool p1IsLeft = Player1.SimX < Player2.SimX;
 			if (p1ShouldBeLeft != p1IsLeft)
 			{
-				Player1.Position = new Vector3(p1xLastFrame, Player1.Position.Y, Player1.Position.Z);
-				Player2.Position = new Vector3(p2xLastFrame, Player2.Position.Y, Player2.Position.Z);
+				Player1.SimX = p1xLastFrame;
+				Player2.SimX = p2xLastFrame;
+				Player1.SyncVisualPosition();
+				Player2.SyncVisualPosition();
 			}
 		}
-		
 	}
 
 	private void EnforceStageBoundaries()
 	{
 		if (Player1 == null || Player2 == null) return;
 
-		float p1x = Player1.Position.X;
-		float p2x = Player2.Position.X;
+		int p1x = Player1.SimX;
+		int p2x = Player2.SimX;
 
-		float separation = Mathf.Abs(p1x - p2x);
+		int separation = Math.Abs(p1x - p2x);
 
 		if (separation > PlayerConstants.MaxPlayerSeparation)
 		{
-			float halfMax = PlayerConstants.MaxPlayerSeparation / 2f;
-			float MidpointLastFrame = (p1xLastFrame + p2xLastFrame) / 2;
-			// clamp each player to within halfMax of the midpoint
-			float p1Limit = Mathf.Clamp(p1x, MidpointLastFrame - halfMax, MidpointLastFrame + halfMax);
-			float p2Limit = Mathf.Clamp(p2x, MidpointLastFrame - halfMax, MidpointLastFrame + halfMax);
-			Player1.Position = new Vector3(p1Limit, Player1.Position.Y, Player1.Position.Z);
-			Player2.Position = new Vector3(p2Limit, Player2.Position.Y, Player2.Position.Z);
+			int halfMax = PlayerConstants.MaxPlayerSeparation / 2;
+			int MidpointLastFrame = (p1xLastFrame + p2xLastFrame) / 2;
+			Player1.SimX = Math.Clamp(p1x, MidpointLastFrame - halfMax, MidpointLastFrame + halfMax);
+			Player2.SimX = Math.Clamp(p2x, MidpointLastFrame - halfMax, MidpointLastFrame + halfMax);
+			Player1.SyncVisualPosition();
+			Player2.SyncVisualPosition();
 		}
 
-		// wall clamping — neither player can go past the stage edges
-		float wall = PlayerConstants.MaxDistanceFromCenter;
-		// yucky bandaid solution but probably wont get fixed cuz i cant think of anything
-		// Theres probably an edge case where both players are in the corner at the same time,
-		// But i dont think it will be a problem
+		int wall = PlayerConstants.MaxDistanceFromCenter;
 		bool p1InCorner = Math.Abs(p1xLastFrame) >= wall;
 		bool p2InCorner = Math.Abs(p2xLastFrame) >= wall;
-		float p1Walls = p2InCorner ? wall - 0.1f : wall;
-		float p2Walls = p1InCorner ? wall - 0.1f : wall;
+		int p1Walls = p2InCorner ? wall - PlayerConstants.WallCornerInset : wall;
+		int p2Walls = p1InCorner ? wall - PlayerConstants.WallCornerInset : wall;
 
-		Player1.Position = new Vector3(Mathf.Clamp(Player1.Position.X, -p1Walls, p1Walls), Player1.Position.Y, Player1.Position.Z);
-		Player2.Position = new Vector3(Mathf.Clamp(Player2.Position.X, -p2Walls, p2Walls), Player2.Position.Y, Player2.Position.Z);
+		Player1.SimX = Math.Clamp(Player1.SimX, -p1Walls, p1Walls);
+		Player2.SimX = Math.Clamp(Player2.SimX, -p2Walls, p2Walls);
+		Player1.SyncVisualPosition();
+		Player2.SyncVisualPosition();
 	}
 
-	// If a player is against the wall with pushback aimed into it, move that pushback onto the opponent.
 	private void TransferCornerPushback()
 	{
 		if (Player1 == null || Player2 == null) return;
 
-		float wall = PlayerConstants.MaxDistanceFromCenter;
-		const float eps = 0.01f;
+		int wall = PlayerConstants.MaxDistanceFromCenter;
+		const int eps = 100;
 
 		TransferCornerPushbackFor(Player1, Player2, wall, eps);
 		TransferCornerPushbackFor(Player2, Player1, wall, eps);
 	}
 
-	private static void TransferCornerPushbackFor(Player defender, Player attacker, float wall, float eps)
+	private static void TransferCornerPushbackFor(Player defender, Player attacker, int wall, int eps)
 	{
-		float pb = defender.PushbackVelocityX;
-		if (pb == 0f) return;
+		int pb = defender.PushbackVelocityX;
+		if (pb == 0) return;
 
-		bool intoRightWall = defender.Position.X >= wall - eps && pb > 0f;
-		bool intoLeftWall  = defender.Position.X <= -wall + eps && pb < 0f;
+		bool intoRightWall = defender.SimX >= wall - eps && pb > 0;
+		bool intoLeftWall  = defender.SimX <= -wall + eps && pb < 0;
 		if (!intoRightWall && !intoLeftWall) return;
 
 		attacker.AddPushbackVelocity(-pb);
@@ -228,11 +232,10 @@ public partial class MatchManager : Node
 		{
 			if (!IsInHitPause)
 			{
-				// Move cornered pushback onto the attacker before positions update this frame.
 				TransferCornerPushback();
 				Player1?.Tick();
 				Player2?.Tick();
-				EnforceStageBoundaries(); // do it twice to ensure nothing silly happens
+				EnforceStageBoundaries();
 				ResolvePushboxCollision();
 				EnforceStageBoundaries();
 				ResolveHitboxCollision();
@@ -242,8 +245,8 @@ public partial class MatchManager : Node
 				hitPauseFramesRemaining--;
 			}
 
-			if (Player1 != null) p1xLastFrame = Player1.Position.X;
-			if (Player2 != null) p2xLastFrame = Player2.Position.X;
+			if (Player1 != null) p1xLastFrame = Player1.SimX;
+			if (Player2 != null) p2xLastFrame = Player2.SimX;
 
 			FrameCount++;
 			RecordGameState();
@@ -275,24 +278,25 @@ public partial class MatchManager : Node
 
 			foreach (Box hitbox in hitboxes)
 			{
-				float hLeft   = (hitbox.X * facingMult) + attacker.Position.X - hitbox.Width  / 2;
-				float hRight  = (hitbox.X * facingMult) + attacker.Position.X + hitbox.Width  / 2;
-				float hBottom = hitbox.Y + attacker.Position.Y - hitbox.Height / 2;
-				float hTop    = hitbox.Y + attacker.Position.Y + hitbox.Height / 2;
+				int hx = attacker.SimX + PlayerConstants.ToSim(hitbox.X) * facingMult;
+				int hy = attacker.SimY + PlayerConstants.ToSim(hitbox.Y);
+				int halfW = PlayerConstants.ToSim(hitbox.Width) / 2;
+				int halfH = PlayerConstants.ToSim(hitbox.Height) / 2;
+				int hLeft = hx - halfW;
+				int hRight = hx + halfW;
+				int hBottom = hy - halfH;
+				int hTop = hy + halfH;
 
 				foreach (Box hurtbox in hurtboxes)
 				{
-					float dLeft   = hurtbox.X + defender.Position.X - hurtbox.Width  / 2;
-					float dRight  = hurtbox.X + defender.Position.X + hurtbox.Width  / 2;
-					float dBottom = hurtbox.Y + defender.Position.Y - hurtbox.Height / 2;
-					float dTop    = hurtbox.Y + defender.Position.Y + hurtbox.Height / 2;
+					BoxExtents(defender.SimX, defender.SimY, hurtbox, out int dLeft, out int dRight, out int dBottom, out int dTop);
 
 					bool hit = hRight > dLeft && hLeft < dRight && hTop > dBottom && hBottom < dTop;
 
 					if (hit)
 					{
 						GD.Print($"{attacker.PlayerNumber} hit {defender.PlayerNumber}!");
-						int attackDir = attacker.Position.X < defender.Position.X ? 1 : -1;
+						int attackDir = attacker.SimX < defender.SimX ? 1 : -1;
 
 						if (attack.Data is GrabData grabData)
 						{
@@ -300,7 +304,7 @@ public partial class MatchManager : Node
 							{
 								defender.GetGrabbed(grabData, attack.Id, attacker);
 								attacker.RegisterGrab(defender, grabData);
-								frontPlayer = attacker; // last to connect draws in front
+								frontPlayer = attacker;
 							}
 						}
 						else if (attack.Data is AttackData hitData)
@@ -308,7 +312,7 @@ public partial class MatchManager : Node
 							bool blocked = defender.TakeHit(hitData, attack.Id, attackDir, attacker);
 							attacker.RegisterHit(attack.Id, blocked);
 							TriggerHitPause(hitData.HitPauseDuration, hitData.Strength);
-							frontPlayer = attacker; // last to connect draws in front
+							frontPlayer = attacker;
 						}
 
 						return;

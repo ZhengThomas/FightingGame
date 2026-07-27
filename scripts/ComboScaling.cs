@@ -10,17 +10,17 @@
 // HitstunProrationSteps (default 1 each). Past the last entry, the last value is held.
 public static class ComboScaling
 {
-    public const int ScaleUnit = 1000;
+    public const int ScaleUnit = 10000;
 
     // >>> Edit these tables <<<
     public static readonly int[] DamageScale =
     {
-        1000, 900, 800, 700, 600, 500, 400, 300, 200, 100,
+        10000, 9000, 8000, 7000, 6000, 5000, 4000, 3000, 2000, 1000,
     };
 
     public static readonly int[] HitstunScale =
     {
-        1000, 1000, 1000, 1000, 1000, 900, 800, 700, 600, 500, 400, 300, 200, 100,
+        10000, 10000, 10000, 10000, 10000, 9000, 8000, 7000, 6000, 5000, 4000, 3000, 2000, 1000,
     };
 
     // Hurt gravity scale = 2000 - hitstun scale (hitstun drops → gravity rises).

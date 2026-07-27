@@ -9,11 +9,11 @@ public enum FacingDirection
 }
 public struct PhysicsState
 {
-    public float VelocityX;
-    public float VelocityY;
+    public int VelocityX;
+    public int VelocityY;
     // Separate from movement/knockback. Set by hit/block pushback; transfers to the
     // attacker in the corner; cleared on jump/airdash cancels.
-    public float PushbackVelocityX;
+    public int PushbackVelocityX;
     public bool IsOnFloor;
 }
 
@@ -40,16 +40,23 @@ public struct JumpState
 // timings, knockdown/wakeup, etc.) live in CharacterStats and are read via Player.Stats.
 public static class PlayerConstants
 {
-    public const float FloorY = -0.8f;
+    // Fixed-point scale: sim units = world floats * PhysicsScale. Divide only when
+    // writing Godot Node3D.Position for rendering — never in gameplay math.
+    public const int PhysicsScale = 10000;
+    public const int FloorY = -8000;
     public const int BufferWindow = 6;
     public const int CancelBufferWindow = 8;          // slightly more lenient during cancels
     public const int DashInputLeniency = 10;          // time between two button presses for a dash
-    public const float MaxPushboxCorrectionPerFrame = 0.2f;
-    public const float MaxPlayerSeparation = 6f;      // max distance between the two players
-    public const float MaxDistanceFromCenter = 7f;    // max distance either player can be from the midpoint
+    public const int MaxPushboxCorrectionPerFrame = 2000;
+    public const int MaxPlayerSeparation = 60000;      // max distance between the two players
+    public const int MaxDistanceFromCenter = 70000;    // max distance either player can be from the midpoint
     public const int CrossupProtectionWindow = 3;     // frames either direction counts as back after a crossup
     public const int AirBlockstunLandingPenalty = 15; // extra landing frames when touching down during air blockstun
-    public const float FixedDelta = 0.01666f;         // Using a fixed number since the engine delta is not consistent
+    public const float FixedDelta = 0.01666f; // seconds-per-tick for animation only (not used by physics)
+    public const int WallCornerInset = 100; // keep the non-cornered player slightly off the wall
+
+    public static int ToSim(float world) => (int)Math.Round(world * PhysicsScale);
+    public static float ToWorld(int sim) => sim / (float)PhysicsScale;
 }
 
 public class ActiveMove
@@ -202,6 +209,9 @@ public partial class Player : Node3D
     public InputHistory Inputs => inputs;
     InputHistory inputs;
     public PhysicsState physics;
+    // Sim-space position (PhysicsScale units). Source of truth for gameplay.
+    public int SimX;
+    public int SimY;
     PlayerState currentState = PlayerState.Idle;
     JumpState jump = new JumpState { JumpSquatFrame = -1, AirdashFrame = -1, LandingFrame = -1 };
     ActiveMove currentMove = null;
@@ -249,8 +259,19 @@ public partial class Player : Node3D
         Match = GetNode<MatchManager>("/root/MatchManager");
         Match.RegisterPlayer(this, PlayerNumber);
 
+        // Scene placement is in world floats; bake into sim ints once.
+        SimX = PlayerConstants.ToSim(Position.X);
+        SimY = PlayerConstants.ToSim(Position.Y);
+        SyncVisualPosition();
+
         lastFacing = PlayerNumber == 1 ? FacingDirection.Right : FacingDirection.Left;
         InitializeMoveList();
+    }
+
+    // Push sim coords to Godot for rendering only.
+    public void SyncVisualPosition()
+    {
+        Position = new Vector3(PlayerConstants.ToWorld(SimX), PlayerConstants.ToWorld(SimY), Position.Z);
     }
 
     protected virtual void InitializeMoveList()
@@ -378,7 +399,7 @@ public partial class Player : Node3D
         hitReaction.DamageScaleIndex += data.DamageProrationSteps;
         hitReaction.HitstunScaleIndex += data.HitstunProrationSteps;
 
-        float pushX = data.Pushback * direction;
+        int pushX = data.Pushback * direction;
         physics.VelocityX = 0;
         physics.PushbackVelocityX = pushX;
 
@@ -399,7 +420,7 @@ public partial class Player : Node3D
     {
         blockReaction.Timer.Duration = data.BlockStun > 0 ? data.BlockStun : 15;
         reactionFlashId++;
-        float push = data.PushbackOnBlock == 0 ? data.Pushback : data.PushbackOnBlock;
+        int push = data.PushbackOnBlock == 0 ? data.Pushback : data.PushbackOnBlock;
         physics.VelocityX = 0;
         physics.PushbackVelocityX = push * direction;
 
@@ -486,9 +507,9 @@ public partial class Player : Node3D
             || currentState == PlayerState.AirBlockstun;
     }
 
-    public float PushbackVelocityX => physics.PushbackVelocityX;
+    public int PushbackVelocityX => physics.PushbackVelocityX;
 
-    public void AddPushbackVelocity(float x)
+    public void AddPushbackVelocity(int x)
     {
         physics.PushbackVelocityX += x;
     }
@@ -517,13 +538,13 @@ public partial class Player : Node3D
     }
 
     // Movement API used by the attacker to drive the defender during a grab sequence.
-    public void SetVelocity(float x, float y)
+    public void SetVelocity(int x, int y)
     {
         physics.VelocityX = x;
         physics.VelocityY = y;
     }
 
-    public void AddVelocity(float x, float y)
+    public void AddVelocity(int x, int y)
     {
         physics.VelocityX += x;
         physics.VelocityY += y;
@@ -531,10 +552,22 @@ public partial class Player : Node3D
 
     public void SnapToPosition(Vector3 position)
     {
-        Position = position;
+        SimX = PlayerConstants.ToSim(position.X);
+        SimY = PlayerConstants.ToSim(position.Y);
         physics.VelocityX = 0;
         physics.VelocityY = 0;
         physics.PushbackVelocityX = 0;
+        SyncVisualPosition();
+    }
+
+    public void SnapToSim(int x, int y)
+    {
+        SimX = x;
+        SimY = y;
+        physics.VelocityX = 0;
+        physics.VelocityY = 0;
+        physics.PushbackVelocityX = 0;
+        SyncVisualPosition();
     }
 
     public void FlipFacing()
@@ -554,11 +587,9 @@ public partial class Player : Node3D
 
         // Snap the defender to the inital grab position.
         int facingMult = GetFacing() == FacingDirection.Right ? 1 : -1;
-        defender.SnapToPosition(new Vector3(
-            Position.X + grabData.DefenderSnapOffsetX * facingMult,
-            Position.Y + grabData.DefenderSnapOffsetY,
-            Position.Z
-        ));
+        defender.SnapToSim(
+            SimX + PlayerConstants.ToSim(grabData.DefenderSnapOffsetX) * facingMult,
+            SimY + PlayerConstants.ToSim(grabData.DefenderSnapOffsetY));
         TransitionTo(PlayerState.GrabHit);
     }
 
@@ -594,7 +625,7 @@ public partial class Player : Node3D
     // Also checks for corssup protection window
     public bool IsHoldingBackForBlock(Player attacker)
     {
-        bool attackerIsToRight = attacker.Position.X > Position.X;
+        bool attackerIsToRight = attacker.SimX > SimX;
 
         // If were currently correctly holding away from the attacker, we are holding back
         bool holdingBackNow = attackerIsToRight ? inputs[0].Left : inputs[0].Right;
@@ -605,9 +636,8 @@ public partial class Player : Node3D
         if (holdingNeutral) return false;
         for (int i = 0; i <= PlayerConstants.CrossupProtectionWindow; i++)
         {
-            Vector3 historicalAttackerPos = Match.GetHistoricalPosition(attacker, i);
-            Vector3 historicalDefenderPos = Match.GetHistoricalPosition(this, i);
-            bool attackerWasToRight = historicalAttackerPos.X > historicalDefenderPos.X;
+            (int ax, int dx) = Match.GetHistoricalSimX(attacker, this, i);
+            bool attackerWasToRight = ax > dx;
 
             // Since were not holding neutral and there was a crossup, we are blocking regardless of 
             // What direction we are currently holding
@@ -689,7 +719,7 @@ public partial class Player : Node3D
         Player opponent = Match.Player1 == this ? Match.Player2 : Match.Player1;
         if (opponent == null) return;
 
-        lastFacing = opponent.Position.X > Position.X ? FacingDirection.Right : FacingDirection.Left;
+        lastFacing = opponent.SimX > SimX ? FacingDirection.Right : FacingDirection.Left;
     }
 
     public FacingDirection GetFacing()
@@ -812,9 +842,9 @@ public partial class Player : Node3D
         if (SuppressGravity) return;
 
         bool hurt = IsHurt();
-        float floating = hurt ? Stats.HitstunFloatingGravity : Stats.FloatingGravity;
-        float rising   = hurt ? Stats.HitstunRisingGravity   : Stats.RisingGravity;
-        float falling  = hurt ? Stats.HitstunFallingGravity  : Stats.FallingGravity;
+        int floating = hurt ? Stats.HitstunFloatingGravity : Stats.FloatingGravity;
+        int rising   = hurt ? Stats.HitstunRisingGravity   : Stats.RisingGravity;
+        int falling  = hurt ? Stats.HitstunFallingGravity  : Stats.FallingGravity;
 
         // Jumps are floatier if you are doing an air combo
         if (!hurt && jump.CurrentJumpType == JumpType.Combo)
@@ -969,7 +999,7 @@ public partial class Player : Node3D
         // Drive the grab here using grabPartner.SetVelocity / AddVelocity / SnapToPosition.
         if (grabSequence.Timer.Frame == 20)
         {
-            grabPartner.SetVelocity(3f * (int)GetFacing(), 9f);
+            grabPartner.SetVelocity(500 * (int)GetFacing(), 1500); // 0.05 / 0.15 world → physics units
             grabPartner.hitReaction.Timer.Duration = 100; // They get "hit" by the grab and are sent flying ish
             // HardKnockdown was already set from GrabData in GetGrabbed.
             // this will be custom for each character, but rn im lazy and this is simple and sounds right
@@ -1533,9 +1563,9 @@ public partial class Player : Node3D
         // Does nothing 
     }
 
-    protected virtual void Decelerate(float? speed = null)
+    protected virtual void Decelerate(int? speed = null)
     {
-        float deceleration = speed ?? (Math.Abs(physics.VelocityX) > Stats.StrongDecelerationThreshold
+        int deceleration = speed ?? (Math.Abs(physics.VelocityX) > Stats.StrongDecelerationThreshold
             ? Stats.StrongDecelerationSpeed
             : Stats.DecelerationSpeed);
 
@@ -1547,7 +1577,7 @@ public partial class Player : Node3D
 
     protected virtual void DeceleratePushback()
     {
-        float deceleration = Stats.GroundedHitDecelerationSpeed;
+        int deceleration = Stats.GroundedHitDecelerationSpeed;
         if (physics.PushbackVelocityX > 0)
             physics.PushbackVelocityX = Math.Max(0, physics.PushbackVelocityX - deceleration);
         else if (physics.PushbackVelocityX < 0)
@@ -1560,12 +1590,12 @@ public partial class Player : Node3D
         // - rising: keep full pushback (no drag)
         // - top of arc: decelerate, but not below AirHitMinimumSpeed
         // - falling: snap to that minimum in the same direction
-        float pb = physics.PushbackVelocityX;
-        if (pb == 0f) return;
+        int pb = physics.PushbackVelocityX;
+        if (pb == 0) return;
 
         if (Math.Abs(physics.VelocityY) <= Stats.FloatingGravityThreshold)
         {
-            float deceleration = Stats.AirHitDecelerationSpeed;
+            int deceleration = Stats.AirHitDecelerationSpeed;
             if (pb > 0)
                 physics.PushbackVelocityX = Math.Max(Stats.AirHitMinimumSpeed, pb - deceleration);
             else
@@ -1600,7 +1630,7 @@ public partial class Player : Node3D
         }
     }
 
-    protected virtual void Jump(float jumpForce, JumpType jumpType)
+    protected virtual void Jump(int jumpForce, JumpType jumpType)
     {
         ClearPushbackVelocity();
         SetupJumpDirection();
@@ -1625,18 +1655,17 @@ public partial class Player : Node3D
 
     protected virtual void ApplyVelocity()
     {
-        Position = new Vector3(
-            Position.X + (physics.VelocityX + physics.PushbackVelocityX) * PlayerConstants.FixedDelta,
-            Position.Y + physics.VelocityY * PlayerConstants.FixedDelta,
-            Position.Z
-        );
+        // Velocities are physics units per frame; only divide when syncing the node for display.
+        SimX += physics.VelocityX + physics.PushbackVelocityX;
+        SimY += physics.VelocityY;
+        SyncVisualPosition();
     }
 
     protected virtual void ResolveFloorCollision()
     {
-        if (Position.Y <= PlayerConstants.FloorY)
+        if (SimY <= PlayerConstants.FloorY)
         {
-            Position = new Vector3(Position.X, PlayerConstants.FloorY, Position.Z);
+            SimY = PlayerConstants.FloorY;
             physics.VelocityY = 0;
             if (!physics.IsOnFloor)
             {
@@ -1658,6 +1687,7 @@ public partial class Player : Node3D
                 }
             }
             physics.IsOnFloor = true;
+            SyncVisualPosition();
         }
         else
         {

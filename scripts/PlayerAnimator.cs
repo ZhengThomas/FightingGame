@@ -412,11 +412,11 @@ public partial class PlayerAnimator : Node3D
             PlayerState.Crouching or PlayerState.CrouchAttacking => CrouchAnim,
             PlayerState.JumpSquat        => JumpSquatAnim,
             PlayerState.Jumping or PlayerState.AirAttacking
-                => player.Physics.VelocityY > 0f ? JumpRiseAnim : FallAnim,
+                => player.Physics.VelocityY > 0 ? JumpRiseAnim : FallAnim,
             PlayerState.Airdashing       => AirdashAnimForDirection(),
             PlayerState.Landing          => LandingAnim,
             PlayerState.Hitstun          => HurtAnim,
-            PlayerState.AirHitstun       => player.Physics.VelocityY > 0f ? AirHurtRiseAnim : AirHurtFallAnim,
+            PlayerState.AirHitstun       => player.Physics.VelocityY > 0 ? AirHurtRiseAnim : AirHurtFallAnim,
             PlayerState.SoftKnockdown    => SoftKnockdownAnim,
             PlayerState.Knockdown        => KnockdownAnim,
             PlayerState.Wakeup           => WakeupAnim,
@@ -438,8 +438,8 @@ public partial class PlayerAnimator : Node3D
     // Picks forward vs backward walk based on whether we're moving toward the opponent.
     protected virtual string WalkAnimForDirection()
     {
-        float vx = player.Physics.VelocityX;
-        if (Mathf.Abs(vx) < 0.01f)
+        int vx = player.Physics.VelocityX;
+        if (Mathf.Abs(vx) < 1)
             return WalkForwardAnim;
 
         bool movingForward = (player.GetFacing() == FacingDirection.Right && vx > 0f)

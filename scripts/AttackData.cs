@@ -62,10 +62,10 @@ public class AttackData : MoveData
 {
     public int HitStun;
     public int BlockStun;
-    public float Pushback;
-    public float PushbackOnBlock;
-    public float LaunchForce;
-    public float LaunchForceOnBlock;
+    public int Pushback;
+    public int PushbackOnBlock;
+    public int LaunchForce;
+    public int LaunchForceOnBlock;
 
     public bool IsOverhead;       // must be blocked standing
     public bool IsLow;            // must be blocked crouching
