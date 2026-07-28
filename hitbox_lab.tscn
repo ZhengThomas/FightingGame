@@ -15,3 +15,13 @@ Frame = 6
 
 [node name="HitboxGizmo" type="Node3D" parent="Player" unique_id=2120891098]
 script = ExtResource("2_gizmo")
+X = 0.81
+Y = 0.3
+Depth = 0.0
+
+[node name="HitboxGizmo2" type="Node3D" parent="Player" unique_id=575442643]
+script = ExtResource("2_gizmo")
+X = 0.81
+Y = 1.27
+Width = 0.0
+Depth = 0.0

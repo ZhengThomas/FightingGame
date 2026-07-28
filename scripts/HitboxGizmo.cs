@@ -89,10 +89,13 @@ public partial class HitboxGizmo : Node3D
 
         EnsurePreview();
 
-        ((BoxMesh)preview.Mesh).Size = new Vector3(
-            Mathf.Max(0.001f, width),
-            Mathf.Max(0.001f, height),
-            Mathf.Max(0.001f, depth));
+        preview.Mesh = new BoxMesh
+        {
+            Size = new Vector3(
+                Mathf.Max(0.001f, width),
+                Mathf.Max(0.001f, height),
+                Mathf.Max(0.001f, depth))
+        };
         preview.Position = new Vector3(x, y, 0f);
         preview.MaterialOverride = MakeMaterial();
     }

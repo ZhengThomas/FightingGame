@@ -53,7 +53,7 @@ public static class PlayerConstants
     public const int CrossupProtectionWindow = 3;     // frames either direction counts as back after a crossup
     public const int AirBlockstunLandingPenalty = 15; // extra landing frames when touching down during air blockstun
     public const float FixedDelta = 0.01666f; // seconds-per-tick for animation only (not used by physics)
-    public const int WallCornerInset = 100; // keep the non-cornered player slightly off the wall
+    public const int WallCornerInset = 2000; // keep the non-cornered player slightly off the wall
 
     public static int ToSim(float world) => (int)Math.Round(world * PhysicsScale);
     public static float ToWorld(int sim) => sim / (float)PhysicsScale;

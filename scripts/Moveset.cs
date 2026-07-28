@@ -17,7 +17,7 @@ public static class Moveset
         HitstunProrationSteps = 0,
         HitboxesPerFrame =
         [
-            [new Box { X = 0.6f, Y = 0.5f, Width = 0.6f, Height = 0.3f }]
+            [new Box { X = 0.8f, Y = 0.3f, Width = 0.6f, Height = 0.3f }]
         ],
         IsOverhead = false,
         IsLow = false,
