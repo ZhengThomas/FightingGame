@@ -240,8 +240,8 @@ public static class Moveset
         Strength = MoveType.Grab,
         CausesHardKnockdown = true,
         GrabSequenceDuration = 65,
-        DefenderSnapOffsetX = 1f,
-        DefenderSnapOffsetY = 0f,
+        DefenderSnapOffsetX = 10000,
+        DefenderSnapOffsetY = 0,
     };
 
     public static readonly GrabData BackGrab = new GrabData
@@ -257,8 +257,8 @@ public static class Moveset
         Strength = MoveType.Grab,
         CausesHardKnockdown = true,
         GrabSequenceDuration = 65,
-        DefenderSnapOffsetX = 1f,
-        DefenderSnapOffsetY = 0f,
+        DefenderSnapOffsetX = 10000,
+        DefenderSnapOffsetY = 0,
         IsBackThrow = true,
     };
 }

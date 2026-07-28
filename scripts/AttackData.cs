@@ -75,15 +75,15 @@ public class AttackData : MoveData
 
 // Data for a grab move. Bypasses blocking and hands control of the defender to the attacker.
 // The attacker scripts the grab in HandleGrabHitState using the Player movement API
-// (SetVelocity, AddVelocity, SnapToPosition) on their grabPartner.
+// (SetVelocity, AddVelocity, SnapToSim) on their grabPartner.
 public class GrabData : MoveData
 {
     public int GrabSequenceDuration; // total frames before the attacker returns to Idle
 
-    // Where the defender snaps the moment the grab connects,
-    // as an offset from the attacker's position. X is in the attacker's forward direction.
-    public float DefenderSnapOffsetX;
-    public float DefenderSnapOffsetY;
+    // Where the defender snaps the moment the grab connects, as an offset from the attacker's
+    // position, in sim units. X is in the attacker's forward direction.
+    public int DefenderSnapOffsetX;
+    public int DefenderSnapOffsetY;
 
     // If true, the attacker turns around before the defender snaps into position,
     // placing the defender behind the attacker (a backthrow).

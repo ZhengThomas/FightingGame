@@ -24,13 +24,12 @@ public partial class HitboxGizmo : Node3D
     private bool drawOnTop = true;
 
     [Export] public BoxKind Kind { get => kind; set { kind = value; UpdatePreview(); } }
-    // Range hints render these as sliders in the Inspector. "or_greater/or_less" means you can
-    // still type values beyond the slider range if you ever need to. Step of 100 sim units
-    // (= 0.01 world units) gives fine control while still snapping to reasonable values.
-    [Export(PropertyHint.Range, "-30000,30000,100,or_greater,or_less")] public int X { get => x; set { x = value; UpdatePreview(); } }
-    [Export(PropertyHint.Range, "-30000,30000,100,or_greater,or_less")] public int Y { get => y; set { y = value; UpdatePreview(); } }
-    [Export(PropertyHint.Range, "0,50000,100,or_greater")] public int Width { get => width; set { width = value; UpdatePreview(); } }
-    [Export(PropertyHint.Range, "0,50000,100,or_greater")] public int Height { get => height; set { height = value; UpdatePreview(); } }
+    // Range hints render these as sliders in the Inspector. Step is 100 sim units (= 0.01 world
+    // units) for fine control.
+    [Export(PropertyHint.Range, "-60000,60000,100")] public int X { get => x; set { x = value; UpdatePreview(); } }
+    [Export(PropertyHint.Range, "-60000,60000,100")] public int Y { get => y; set { y = value; UpdatePreview(); } }
+    [Export(PropertyHint.Range, "0,60000,100")] public int Width { get => width; set { width = value; UpdatePreview(); } }
+    [Export(PropertyHint.Range, "0,60000,100")] public int Height { get => height; set { height = value; UpdatePreview(); } }
     // Cosmetic thickness along Z in world units (gameplay boxes are 2D); only affects how the preview looks.
     [Export] public float Depth { get => depth; set { depth = value; UpdatePreview(); } }
     // Draw over the model so the box is always visible while positioning it.

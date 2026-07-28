@@ -378,14 +378,9 @@ public partial class Player : Node3D
             return true;
         }
 
-        // If its the first time we are getting hit, we reset combo scaling.
+        // Starter hit: reset combo scaling. Combo continuations (already IsHurt) preserve it.
         if (!IsHurt())
-        {
-            hitReaction.DamageScaleIndex = 0;
-            hitReaction.HitstunScaleIndex = 0;
-            hitReaction.GravityScale = ComboScaling.ScaleUnit;
-            hitReaction.HardKnockdown = false;
-        }
+            ResetComboScaling();
 
         int hitstunScale = ComboScaling.Sample(ComboScaling.HitstunScale, hitReaction.HitstunScaleIndex);
         hitReaction.GravityScale = ComboScaling.GravityFromHitstun(hitstunScale);
@@ -552,16 +547,6 @@ public partial class Player : Node3D
         physics.VelocityY += y;
     }
 
-    public void SnapToPosition(Vector3 position)
-    {
-        SimX = PlayerConstants.ToSim(position.X);
-        SimY = PlayerConstants.ToSim(position.Y);
-        physics.VelocityX = 0;
-        physics.VelocityY = 0;
-        physics.PushbackVelocityX = 0;
-        SyncVisualPosition();
-    }
-
     public void SnapToSim(int x, int y)
     {
         SimX = x;
@@ -587,11 +572,22 @@ public partial class Player : Node3D
         if (grabData.IsBackThrow)
             FlipFacing();
 
-        // Snap the defender to the inital grab position.
+        // Snap the defender to the inital grab position. If the desired snap would put the
+        // defender past the wall, clamp them at the wall and shift the attacker by the same amount
         int facingMult = GetFacing() == FacingDirection.Right ? 1 : -1;
-        defender.SnapToSim(
-            SimX + PlayerConstants.ToSim(grabData.DefenderSnapOffsetX) * facingMult,
-            SimY + PlayerConstants.ToSim(grabData.DefenderSnapOffsetY));
+        int desiredDefenderX = SimX + grabData.DefenderSnapOffsetX * facingMult;
+        int desiredDefenderY = SimY + grabData.DefenderSnapOffsetY;
+
+        int wall = PlayerConstants.MaxDistanceFromCenter;
+        int clampedDefenderX = Math.Clamp(desiredDefenderX, -wall, wall);
+        int attackerShift = clampedDefenderX - desiredDefenderX;
+        if (attackerShift != 0)
+        {
+            SimX += attackerShift;
+            SyncVisualPosition();
+        }
+
+        defender.SnapToSim(clampedDefenderX, desiredDefenderY);
         TransitionTo(PlayerState.GrabHit);
     }
 
@@ -604,9 +600,24 @@ public partial class Player : Node3D
 
         grabPartner = attacker;
         grabSequence.Timer.Duration = grabData.GrabSequenceDuration;
+
+        // Starter grab: reset combo scaling. Combo grabs (grabbed while already hurt) preserve
+        // the running scaling from prior hits. This mirrors TakeHit's convention.
+        if (!IsHurt())
+            ResetComboScaling();
         hitReaction.HardKnockdown = grabData.CausesHardKnockdown;
 
         TransitionTo(PlayerState.HitByGrab);
+    }
+
+    // Fresh-combo defaults for the running scaling state. Called from every entry point into a
+    // hurt/grabbed state that starts a new combo 
+    protected void ResetComboScaling()
+    {
+        hitReaction.DamageScaleIndex = 0;
+        hitReaction.HitstunScaleIndex = 0;
+        hitReaction.GravityScale = ComboScaling.ScaleUnit;
+        hitReaction.HardKnockdown = false;
     }
 
     // Returns true if the given state is one where the player is allowed to block.
@@ -830,11 +841,13 @@ public partial class Player : Node3D
         {
             GD.Print("DownUp");
         }
-
-        // Fired once per simulation tick. The animator listens to this to step animations
-        // in lockstep with the game (so they freeze when the game is paused / in hit pause).
-        EmitSignal(SignalName.Ticked);
     }
+
+    // MatchManager fires this at the end of each simulation tick, AFTER hit/pushbox resolution,
+    // so listeners (animator, VFX) see the post-collision state. Firing it inside Tick() would
+    // leave the defender's animator one frame behind on hit — the hurt clip's first frame would
+    // then only appear once hit pause ends, killing the impact read.
+    public void EmitTickSignal() => EmitSignal(SignalName.Ticked);
 
     protected virtual void ApplyGravity()
     {

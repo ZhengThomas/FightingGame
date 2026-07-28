@@ -249,6 +249,12 @@ public partial class MatchManager : Node
 				ResolvePushboxCollision();
 				EnforceStageBoundaries();
 				ResolveHitboxCollision();
+
+				// Fire the animator/VFX clock AFTER hit resolution so a hit that lands this tick
+				// pushes the defender into Hitstun before the animator picks its clip. This
+				// is for game feel
+				Player1?.EmitTickSignal();
+				Player2?.EmitTickSignal();
 			}
 			else
 			{
