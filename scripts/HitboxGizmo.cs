@@ -12,22 +12,26 @@ public partial class HitboxGizmo : Node3D
 {
     public enum BoxKind { Hitbox, Hurtbox, Pushbox }
 
+    // All box fields are in sim units (world * PlayerConstants.PhysicsScale), matching how they
+    // are stored on the runtime Box struct. Width and Height are HALF-extents: the drawn preview
+    // spans [X - Width, X + Width] horizontally and [Y - Height, Y + Height] vertically.
     private BoxKind kind = BoxKind.Hitbox;
-    private float x = 0.6f;
-    private float y = 0.5f;
-    private float width = 0.6f;
-    private float height = 0.3f;
+    private int x = 6000;
+    private int y = 5000;
+    private int width = 3000;
+    private int height = 1500;
     private float depth = 0.1f;
     private bool drawOnTop = true;
 
     [Export] public BoxKind Kind { get => kind; set { kind = value; UpdatePreview(); } }
     // Range hints render these as sliders in the Inspector. "or_greater/or_less" means you can
-    // still type values beyond the slider range if you ever need to.
-    [Export(PropertyHint.Range, "-3,3,0.01,or_greater,or_less")] public float X { get => x; set { x = value; UpdatePreview(); } }
-    [Export(PropertyHint.Range, "-3,3,0.01,or_greater,or_less")] public float Y { get => y; set { y = value; UpdatePreview(); } }
-    [Export(PropertyHint.Range, "0,5,0.01,or_greater")] public float Width { get => width; set { width = value; UpdatePreview(); } }
-    [Export(PropertyHint.Range, "0,5,0.01,or_greater")] public float Height { get => height; set { height = value; UpdatePreview(); } }
-    // Cosmetic thickness along Z (gameplay boxes are 2D); only affects how the preview looks.
+    // still type values beyond the slider range if you ever need to. Step of 100 sim units
+    // (= 0.01 world units) gives fine control while still snapping to reasonable values.
+    [Export(PropertyHint.Range, "-30000,30000,100,or_greater,or_less")] public int X { get => x; set { x = value; UpdatePreview(); } }
+    [Export(PropertyHint.Range, "-30000,30000,100,or_greater,or_less")] public int Y { get => y; set { y = value; UpdatePreview(); } }
+    [Export(PropertyHint.Range, "0,50000,100,or_greater")] public int Width { get => width; set { width = value; UpdatePreview(); } }
+    [Export(PropertyHint.Range, "0,50000,100,or_greater")] public int Height { get => height; set { height = value; UpdatePreview(); } }
+    // Cosmetic thickness along Z in world units (gameplay boxes are 2D); only affects how the preview looks.
     [Export] public float Depth { get => depth; set { depth = value; UpdatePreview(); } }
     // Draw over the model so the box is always visible while positioning it.
     [Export] public bool DrawOnTop { get => drawOnTop; set { drawOnTop = value; UpdatePreview(); } }
@@ -89,14 +93,18 @@ public partial class HitboxGizmo : Node3D
 
         EnsurePreview();
 
+        // BoxMesh.Size is a full extent in world units, but width/height are sim half-extents,
+        // so full-extent-in-world = ToWorld(width) * 2 = width * 2 / PhysicsScale.
+        float worldFullW = PlayerConstants.ToWorld(width) * 2f;
+        float worldFullH = PlayerConstants.ToWorld(height) * 2f;
         preview.Mesh = new BoxMesh
         {
             Size = new Vector3(
-                Mathf.Max(0.001f, width),
-                Mathf.Max(0.001f, height),
+                Mathf.Max(0.001f, worldFullW),
+                Mathf.Max(0.001f, worldFullH),
                 Mathf.Max(0.001f, depth))
         };
-        preview.Position = new Vector3(x, y, 0f);
+        preview.Position = new Vector3(PlayerConstants.ToWorld(x), PlayerConstants.ToWorld(y), 0f);
         preview.MaterialOverride = MakeMaterial();
     }
 
@@ -122,6 +130,6 @@ public partial class HitboxGizmo : Node3D
 
     private void PrintBox()
     {
-        GD.Print($"new Box {{ X = {x}f, Y = {y}f, Width = {width}f, Height = {height}f }}  // {kind}");
+        GD.Print($"new Box {{ X = {x}, Y = {y}, Width = {width}, Height = {height} }}  // {kind}");
     }
 }

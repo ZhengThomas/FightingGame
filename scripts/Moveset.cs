@@ -17,7 +17,7 @@ public static class Moveset
         HitstunProrationSteps = 0,
         HitboxesPerFrame =
         [
-            [new Box { X = 0.8f, Y = 0.3f, Width = 0.6f, Height = 0.3f }]
+            [new Box { X = 8000, Y = 3000, Width = 3000, Height = 1500 }]
         ],
         IsOverhead = false,
         IsLow = false,
@@ -40,7 +40,7 @@ public static class Moveset
         LaunchForce = 500,
         HitstunProrationSteps = 0,
         HitboxesPerFrame = [
-            [new Box { X = 0.7f, Y = 0.9f, Width = 0.6f, Height = 0.3f }]
+            [new Box { X = 7000, Y = 9000, Width = 3000, Height = 1500 }]
         ],
         IsOverhead = false,
         IsLow = true,
@@ -62,7 +62,7 @@ public static class Moveset
         Pushback = 500,
         LaunchForce = 500,
         HitboxesPerFrame = [
-            [new Box { X = 0.9f, Y = 1.7f, Width = 0.7f, Height = 0.7f }]
+            [new Box { X = 9000, Y = 17000, Width = 3500, Height = 3500 }]
         ],
         IsOverhead = true,
         IsLow = false,
@@ -85,7 +85,7 @@ public static class Moveset
         LaunchForce = 1000,
         HitboxesPerFrame =
         [
-            [new Box { X = 1.1f, Y = 1.05f, Width = 2.3f, Height = 0.7f }]
+            [new Box { X = 11000, Y = 10500, Width = 11500, Height = 3500 }]
         ],
         IsOverhead = false,
         IsLow = false,
@@ -107,7 +107,7 @@ public static class Moveset
         Pushback = 667,
         LaunchForce = 667,
         HitboxesPerFrame = [
-            [new Box { X = 0.8f, Y = 0.35f, Width = 2.9f, Height = 0.5f }]
+            [new Box { X = 8000, Y = 3500, Width = 14500, Height = 2500 }]
         ],
         IsOverhead = false,
         IsLow = true,
@@ -129,7 +129,7 @@ public static class Moveset
         Pushback = 833,
         LaunchForce = 833,
         HitboxesPerFrame = [
-            [new Box { X = 0f, Y = 0.5f, Width = 2.5f, Height = 1.5f }]
+            [new Box { X = 0, Y = 5000, Width = 12500, Height = 7500 }]
         ],
         IsOverhead = true,
         IsLow = false,
@@ -152,7 +152,7 @@ public static class Moveset
         LaunchForce = 833,
         HitboxesPerFrame =
         [
-            [new Box { X = 1.05f, Y = 1.18f, Width = 2.42f, Height = 1.1f }]
+            [new Box { X = 10500, Y = 11800, Width = 12100, Height = 5500 }]
         ],
         IsOverhead = false,
         IsLow = false,
@@ -174,10 +174,10 @@ public static class Moveset
         Pushback = 500,
         LaunchForce = 2000,
         HitboxesPerFrame = [
-            [new Box { X = 0.5f, Y = 1.6f, Width = 1.3f, Height = 2.5f }]
+            [new Box { X = 5000, Y = 16000, Width = 6500, Height = 12500 }]
         ],
         HurtboxesPerFrame = [
-            [new Box { X = 0, Y = -0.15f, Width = 1f, Height = 0.9f }]
+            [new Box { X = 0, Y = -1500, Width = 5000, Height = 4500 }]
         ],
         IsOverhead = false,
         IsLow = false,
@@ -200,7 +200,7 @@ public static class Moveset
         LaunchForce = 667,
         PushbackOnBlock = 667,
         HitboxesPerFrame = [
-            [new Box { X = 0.68f, Y = 0.75f, Width = 1.8f, Height = 1.55f }]
+            [new Box { X = 6800, Y = 7500, Width = 9000, Height = 7750 }]
         ],
         IsOverhead = true,
         IsLow = false,
@@ -235,7 +235,7 @@ public static class Moveset
         Damage = 100,
         HitPauseDuration = 1,
         HitboxesPerFrame = [
-            [new Box { X = 0.6f, Y = 0.9f, Width = 0.5f, Height = 1.8f }]
+            [new Box { X = 6000, Y = 9000, Width = 2500, Height = 9000 }]
         ],
         Strength = MoveType.Grab,
         CausesHardKnockdown = true,
@@ -252,7 +252,7 @@ public static class Moveset
         Damage = 100,
         HitPauseDuration = 1,
         HitboxesPerFrame = [
-            [new Box { X = 0.6f, Y = 0.9f, Width = 0.5f, Height = 1.8f }]
+            [new Box { X = 6000, Y = 9000, Width = 2500, Height = 9000 }]
         ],
         Strength = MoveType.Grab,
         CausesHardKnockdown = true,

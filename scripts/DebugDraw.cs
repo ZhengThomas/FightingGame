@@ -19,14 +19,20 @@ public partial class DebugDraw : Node2D
     {
         var camera = GetViewport().GetCamera3D();
 
+        // Box is stored in sim units with Width/Height as half-extents; convert once for rendering.
+        float wx = PlayerConstants.ToWorld(box.X);
+        float wy = PlayerConstants.ToWorld(box.Y);
+        float halfW = PlayerConstants.ToWorld(box.Width);
+        float halfH = PlayerConstants.ToWorld(box.Height);
+
         Vector3 worldCenter = new Vector3(
-            player.Position.X + box.X * facingMult,
-            player.Position.Y + box.Y,
+            player.Position.X + wx * facingMult,
+            player.Position.Y + wy,
             player.Position.Z
         );
 
-        Vector3 topLeft3D     = worldCenter + new Vector3(-box.Width / 2,  box.Height / 2, 0);
-        Vector3 bottomRight3D = worldCenter + new Vector3( box.Width / 2, -box.Height / 2, 0);
+        Vector3 topLeft3D     = worldCenter + new Vector3(-halfW,  halfH, 0);
+        Vector3 bottomRight3D = worldCenter + new Vector3( halfW, -halfH, 0);
 
         Vector2 topLeft     = ProjectHybrid(camera, topLeft3D, player);
         Vector2 bottomRight = ProjectHybrid(camera, bottomRight3D, player);

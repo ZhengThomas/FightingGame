@@ -60,16 +60,17 @@ public partial class CameraController : Camera3D
     }
 
     // World-space Y of the top of a player's tallest box (pushbox or any current hurtbox).
+    // Box.Y/Height are sim units, and Height is a half-extent, so the top edge is (Y + Height).
     private float GetPlayerTopY(Player p)
     {
-        float top = p.Position.Y + p.Pushbox.Y + p.Pushbox.Height / 2f;
+        float top = p.Position.Y + PlayerConstants.ToWorld(p.Pushbox.Y + p.Pushbox.Height);
 
         var hurtboxes = p.GetCurrentHurtboxes();
         if (hurtboxes != null)
         {
             foreach (Box b in hurtboxes)
             {
-                float t = p.Position.Y + b.Y + b.Height / 2f;
+                float t = p.Position.Y + PlayerConstants.ToWorld(b.Y + b.Height);
                 if (t > top)
                     top = t;
             }

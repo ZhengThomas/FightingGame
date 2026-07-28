@@ -182,13 +182,15 @@ public struct GrabSequenceState
     public FrameTimer Timer;
 }
 
-// Meant to be a hitbox or hurtbox or whatever
+// Meant to be a hitbox or hurtbox or whatever. All fields are in sim units
+// (world * PlayerConstants.PhysicsScale). Width and Height are HALF-extents:
+// the box spans [X - Width, X + Width] horizontally and [Y - Height, Y + Height] vertically.
 public struct Box
 {
-    public float X;      // offset from player center
-    public float Y;
-    public float Width;
-    public float Height;
+    public int X;       // offset from player center, sim units
+    public int Y;
+    public int Width;   // half-width, sim units
+    public int Height;  // half-height, sim units
 }
 
 public class Move
@@ -235,10 +237,10 @@ public partial class Player : Node3D
     int reactionFlashId;
 
     List<Move> moveList;
-    public Box Pushbox = new Box { X = 0, Y = 0.7f, Width = 0.6f, Height = 1.8f };
-    static readonly List<Box> StandingHurtbox = new List<Box>{ new Box { X = 0, Y = 1.0f, Width = 1f, Height = 2.0f } };
-    static readonly List<Box> CrouchingHurtbox = new List<Box>{new Box { X = 0, Y = 0.5f, Width = 1f, Height = 1.5f }};
-    static readonly List<Box> AirborneHurtbox = new List<Box>{new Box { X = 0, Y = 1.0f, Width = 1f, Height = 2.0f }};
+    public Box Pushbox = new Box { X = 0, Y = 7000, Width = 3000, Height = 9000 };
+    static readonly List<Box> StandingHurtbox = new List<Box>{ new Box { X = 0, Y = 10000, Width = 5000, Height = 10000 } };
+    static readonly List<Box> CrouchingHurtbox = new List<Box>{new Box { X = 0, Y = 5000, Width = 5000, Height = 7500 }};
+    static readonly List<Box> AirborneHurtbox = new List<Box>{new Box { X = 0, Y = 10000, Width = 5000, Height = 10000 }};
 
     // stores 10 most recently received hit ids
     int[] hitHistory = new int[10];

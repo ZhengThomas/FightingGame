@@ -111,16 +111,26 @@ public partial class MatchManager : Node
         else Player2 = player;
     }
 
+	// Box.Width/Height are HALF-extents in sim units, so we use them directly.
 	private static void BoxExtents(int originX, int originY, Box box, out int left, out int right, out int bottom, out int top)
 	{
-		int x = originX + PlayerConstants.ToSim(box.X);
-		int y = originY + PlayerConstants.ToSim(box.Y);
-		int halfW = PlayerConstants.ToSim(box.Width) / 2;
-		int halfH = PlayerConstants.ToSim(box.Height) / 2;
-		left = x - halfW;
-		right = x + halfW;
-		bottom = y - halfH;
-		top = y + halfH;
+		int x = originX + box.X;
+		int y = originY + box.Y;
+		left = x - box.Width;
+		right = x + box.Width;
+		bottom = y - box.Height;
+		top = y + box.Height;
+	}
+
+	// Same as BoxExtents but flips the X offset for a facing-mirrored attacker.
+	private static void BoxExtentsFacing(int originX, int originY, Box box, int facingMult, out int left, out int right, out int bottom, out int top)
+	{
+		int x = originX + box.X * facingMult;
+		int y = originY + box.Y;
+		left = x - box.Width;
+		right = x + box.Width;
+		bottom = y - box.Height;
+		top = y + box.Height;
 	}
 
 	private void ResolvePushboxCollision()
@@ -278,14 +288,7 @@ public partial class MatchManager : Node
 
 			foreach (Box hitbox in hitboxes)
 			{
-				int hx = attacker.SimX + PlayerConstants.ToSim(hitbox.X) * facingMult;
-				int hy = attacker.SimY + PlayerConstants.ToSim(hitbox.Y);
-				int halfW = PlayerConstants.ToSim(hitbox.Width) / 2;
-				int halfH = PlayerConstants.ToSim(hitbox.Height) / 2;
-				int hLeft = hx - halfW;
-				int hRight = hx + halfW;
-				int hBottom = hy - halfH;
-				int hTop = hy + halfH;
+				BoxExtentsFacing(attacker.SimX, attacker.SimY, hitbox, facingMult, out int hLeft, out int hRight, out int hBottom, out int hTop);
 
 				foreach (Box hurtbox in hurtboxes)
 				{
@@ -339,7 +342,7 @@ public partial class MatchManager : Node
 			color = new Color(0.5f, 0, 0.5f); // purple = recovery
 
 		// small box above the player's head
-		Box indicator = new Box { X = 0, Y = 1.0f, Width = 0.4f, Height = 0.2f };
+		Box indicator = new Box { X = 0, Y = 10000, Width = 2000, Height = 1000 };
 		DebugDraw.DrawWorldBox(player, indicator, color);
 	}
 
