@@ -18,21 +18,81 @@ public struct InputFrame
     public bool isDuringHitpause;
 }
 
-// Paired input + consumed history for one player. Same length/indexing.
-// Queries take this as `this` so callers don't pass Consumed separately.
-public struct InputHistory
+// Identifies a single button, used by query helpers (WasJustPressed, MarkConsumed, WasHeld) so
+// they can address both the input side (which field on InputFrame to read) and the mark side
+// (which slot on ConsumedMarks to check/write) with one value.
+public enum Button
 {
-    public InputFrame[] Buffer;
-    public InputFrame[] Consumed;
+    Left, Right, Up, Down, Jump,
+    LightAttack, MediumAttack, HeavyAttack, Dash, Grab,
+}
 
-    public InputFrame this[int i] => Buffer[i];
-    public int Length => Buffer.Length;
-
-    public static InputHistory Create(int size) => new InputHistory
+public static class InputHelpers
+{
+    public static bool IsPressed(InputFrame f, Button b) => b switch
     {
-        Buffer = new InputFrame[size],
-        Consumed = new InputFrame[size],
+        Button.Left         => f.Left,
+        Button.Right        => f.Right,
+        Button.Up           => f.Up,
+        Button.Down         => f.Down,
+        Button.Jump         => f.Jump,
+        Button.LightAttack  => f.LightAttack,
+        Button.MediumAttack => f.MediumAttack,
+        Button.HeavyAttack  => f.HeavyAttack,
+        Button.Dash         => f.Dash,
+        Button.Grab         => f.Grab,
+        _ => false,
     };
+}
+
+// Per-button table that tells you when a input was last consumed
+public struct ConsumedMarks
+{
+    // One int per Button. Kept as a small fixed array so a struct copy is a snapshot copy —
+    // no separate "copy consumed" step to remember. Size = number of Button enum values.
+    public const int SlotCount = 10;
+
+    public int Left, Right, Up, Down, Jump;
+    public int LightAttack, MediumAttack, HeavyAttack, Dash, Grab;
+
+    // Factory for a fresh set of marks: -1 everywhere (no consumption yet).
+    public static ConsumedMarks Empty => new ConsumedMarks
+    {
+        Left = -1, Right = -1, Up = -1, Down = -1, Jump = -1,
+        LightAttack = -1, MediumAttack = -1, HeavyAttack = -1, Dash = -1, Grab = -1,
+    };
+
+    public readonly int Get(Button b) => b switch
+    {
+        Button.Left         => Left,
+        Button.Right        => Right,
+        Button.Up           => Up,
+        Button.Down         => Down,
+        Button.Jump         => Jump,
+        Button.LightAttack  => LightAttack,
+        Button.MediumAttack => MediumAttack,
+        Button.HeavyAttack  => HeavyAttack,
+        Button.Dash         => Dash,
+        Button.Grab         => Grab,
+        _ => -1,
+    };
+
+    public void Set(Button b, int frame)
+    {
+        switch (b)
+        {
+            case Button.Left:         Left = frame; break;
+            case Button.Right:        Right = frame; break;
+            case Button.Up:           Up = frame; break;
+            case Button.Down:         Down = frame; break;
+            case Button.Jump:         Jump = frame; break;
+            case Button.LightAttack:  LightAttack = frame; break;
+            case Button.MediumAttack: MediumAttack = frame; break;
+            case Button.HeavyAttack:  HeavyAttack = frame; break;
+            case Button.Dash:         Dash = frame; break;
+            case Button.Grab:         Grab = frame; break;
+        }
+    }
 }
 
 public struct InputBindings
@@ -79,48 +139,50 @@ public struct ChargeInput
     public static readonly int MaxReleaseGap = 6;         // max frames of non-charge allowed between charge and release
 }
 
-// Static query helpers — operate on any InputHistory, not tied to a specific player.
-// This is rollback-friendly: the same logic runs whether the buffer came from hardware,
-// a network packet, or a saved snapshot.
+// Static query helpers — operate on any InputView, not tied to a specific player.
+// This is rollback-friendly: the same logic runs whether the underlying inputs came from
+// hardware, a network packet, or a restored snapshot
 public static class InputQuery
 {
-    // Returns the matched InputFrame if a button transitioned from unpressed to pressed within the last
-    // bufferWindow non-hitpause frames, or null if no match. Callers can read Left/Right/etc. from the
-    // returned frame to get input state at the exact moment of the press.
-    // A press already flagged in Consumed is ignored.
+    // Returns the matched InputFrame if `button` transitioned from unpressed to pressed within
+    // the last bufferWindow non-hitpause frames, or null if no match. Callers can read the
+    // returned frame's other fields to inspect input state at the moment of the press.
+    // A press whose frame is <= the button's mark (see ConsumedMarks) is treated as already used.
     public static InputFrame? WasJustPressed(
-        this InputHistory inputs, int bufferWindow,
-        Func<InputFrame, bool> pressedInput,
-        Func<InputFrame, bool>[] heldInputs = null,
-        Func<InputFrame, bool>[] notPressedInputs = null)
+        this InputView inputs, int bufferWindow, Button button,
+        Button[] heldButtons = null,
+        Button[] notPressedButtons = null)
     {
-        var buffer = inputs.Buffer;
-        var consumed = inputs.Consumed;
         int i = 0;
         int nonHitpauseFramesSeen = 0;
+        int mark = inputs.MarkFor(button);
 
-        while (nonHitpauseFramesSeen < bufferWindow && i < buffer.Length)
+        while (nonHitpauseFramesSeen < bufferWindow && i < inputs.BufferSize)
         {
+            InputFrame frame = inputs[i];
+            int frameNumber = inputs.CurrentFrame - i;
             bool allPressedThisFrame = true;
 
-            if (!pressedInput(buffer[i]))
+            if (!InputHelpers.IsPressed(frame, button))
                 allPressedThisFrame = false;
 
-            if (allPressedThisFrame && heldInputs != null)
-                foreach (var btn in heldInputs)
-                    if (!btn(buffer[i])) { allPressedThisFrame = false; break; }
+            if (allPressedThisFrame && heldButtons != null)
+                foreach (var b in heldButtons)
+                    if (!InputHelpers.IsPressed(frame, b)) { allPressedThisFrame = false; break; }
 
-            if (allPressedThisFrame && notPressedInputs != null)
-                foreach (var btn in notPressedInputs)
-                    if (btn(buffer[i])) { allPressedThisFrame = false; break; }
+            if (allPressedThisFrame && notPressedButtons != null)
+                foreach (var b in notPressedButtons)
+                    if (InputHelpers.IsPressed(frame, b)) { allPressedThisFrame = false; break; }
 
-            if (allPressedThisFrame && pressedInput(consumed[i]))
+            // Already-consumed check: any prior fire for this button at frame >= frameNumber
+            // suppresses this and all earlier presses.
+            if (allPressedThisFrame && mark >= frameNumber)
                 allPressedThisFrame = false;
 
-            if (allPressedThisFrame && (i + 1 >= buffer.Length || !pressedInput(buffer[i + 1])))
-                return buffer[i];
+            if (allPressedThisFrame && (i + 1 >= inputs.BufferSize || !InputHelpers.IsPressed(inputs[i + 1], button)))
+                return frame;
 
-            if (!buffer[i].isDuringHitpause)
+            if (!frame.isDuringHitpause)
                 nonHitpauseFramesSeen++;
 
             i++;
@@ -128,61 +190,60 @@ public static class InputQuery
         return null;
     }
 
-    // Flag the most recent unconsumed rising edge of pressedInput in Consumed.
-    public static void MarkConsumed(
-        this InputHistory inputs, int bufferWindow,
-        Func<InputFrame, bool> pressedInput,
-        Func<InputFrame, InputFrame> mark)
+    // Set the "last consumed frame" for `button` to the absolute frame of the most recent
+    // unconsumed rising edge inside the window. Everything at or before that frame becomes
+    // implicitly consumed for the same button.
+    public static void MarkConsumed(this InputView inputs, int bufferWindow, Button button)
     {
-        var buffer = inputs.Buffer;
-        var consumed = inputs.Consumed;
-
-        for (int i = 0; i < bufferWindow && i < buffer.Length; i++)
+        int existingMark = inputs.MarkFor(button);
+        for (int i = 0; i < bufferWindow && i < inputs.BufferSize; i++)
         {
-            if (!pressedInput(buffer[i])) continue;
-            if (pressedInput(consumed[i])) continue;
-            if (i + 1 < buffer.Length && pressedInput(buffer[i + 1])) continue;
+            InputFrame frame = inputs[i];
+            if (!InputHelpers.IsPressed(frame, button)) continue;
+            int frameNumber = inputs.CurrentFrame - i;
+            if (existingMark >= frameNumber) continue;
+            if (i + 1 < inputs.BufferSize && InputHelpers.IsPressed(inputs[i + 1], button)) continue;
 
-            consumed[i] = mark(consumed[i]);
+            inputs.SetMarkFor(button, frameNumber);
             return;
         }
     }
 
     // True if all buttons were held simultaneously at any point in the last bufferWindow frames.
-    public static bool WasHeld(this InputHistory inputs, int bufferWindow, params Func<InputFrame, bool>[] buttons)
+    public static bool WasHeld(this InputView inputs, int bufferWindow, params Button[] buttons)
     {
-        var buffer = inputs.Buffer;
         for (int i = 0; i < bufferWindow; i++)
         {
+            InputFrame frame = inputs[i];
             bool allHeld = true;
-            foreach (var btn in buttons)
-                if (!btn(buffer[i])) { allHeld = false; break; }
+            foreach (var b in buttons)
+                if (!InputHelpers.IsPressed(frame, b)) { allHeld = false; break; }
             if (allHeld) return true;
         }
         return false;
     }
 
     // True if the directional sequence described by motion was performed recently.
-    public static bool WasMotion(this InputHistory inputs, bool facingRight, MotionInput motion, int startFrom = 0)
+    public static bool WasMotion(this InputView inputs, bool facingRight, MotionInput motion, int startFrom = 0)
     {
-        var buffer = inputs.Buffer;
         var seq = motion.Sequence;
         int lastFoundFrame = -1;
         int cheatableAmount = motion.CheatableAmount;
 
-        // First we find the very last input of the motion input 
+        // First we find the very last input of the motion input
         // Hitpause doesnt count down the buffer window for the last input of the motion input, for game feel
         int i = startFrom;
         int maxSearch = PlayerConstants.BufferWindow;
         int totalWindow = motion.TotalWindow;
-        while (i < buffer.Length && i < maxSearch)
+        while (i < inputs.BufferSize && i < maxSearch)
         {
-            if (ClassifyDirection(buffer[i], facingRight) == seq[seq.Length - 1].Dir)
+            InputFrame frame = inputs[i];
+            if (ClassifyDirection(frame, facingRight) == seq[seq.Length - 1].Dir)
             {
                 lastFoundFrame = i;
                 break;
             }
-            if (buffer[i].isDuringHitpause)
+            if (frame.isDuringHitpause)
             {
                 maxSearch++;
                 totalWindow++;
@@ -201,9 +262,9 @@ public static class InputQuery
             int searchTo = Math.Min(searchFrom + motion.MaxStepGap, totalWindow);
 
             bool found = false;
-            for (int f = searchFrom; f <= searchTo && f < buffer.Length; f++)
+            for (int f = searchFrom; f <= searchTo && f < inputs.BufferSize; f++)
             {
-                if (ClassifyDirection(buffer[f], facingRight) == step.Dir)
+                if (ClassifyDirection(inputs[f], facingRight) == step.Dir)
                 {
                     lastFoundFrame = f;
                     found = true;
@@ -225,25 +286,25 @@ public static class InputQuery
                 cheatableAmount--;
             }
         }
-        
+
         return true;
     }
 
     // True if a charge input that was specified was performed recently
-    public static bool WasCharge(this InputHistory inputs, bool facingRight, ChargeInput charge)
+    public static bool WasCharge(this InputView inputs, bool facingRight, ChargeInput charge)
     {
-        var buffer = inputs.Buffer;
         // Step 1: find the most recent frame with any release direction within ReleaseWindow.
         // Hitpause doesnt count down the buffer window for the last input of the motion input, for game feel
         int release = -1;
         int maxSearch = ChargeInput.ReleaseWindow;
-        for (int f = 0; f < maxSearch && f < buffer.Length; f++)
+        for (int f = 0; f < maxSearch && f < inputs.BufferSize; f++)
         {
-            if (charge.ReleaseDirs.Any(d => d == ClassifyDirection(buffer[f], facingRight)))
+            InputFrame frame = inputs[f];
+            if (charge.ReleaseDirs.Any(d => d == ClassifyDirection(frame, facingRight)))
             {
                 release = f;
             }
-            if(buffer[f].isDuringHitpause)
+            if (frame.isDuringHitpause)
             {
                 maxSearch++;
             }
@@ -253,9 +314,9 @@ public static class InputQuery
         // Step 2: within MaxReleaseGap frames after the release phase ended, find ChargeDir.
         // This gap covers neutral frames between letting go of charge and pressing release.
         int chargeStart = -1;
-        for (int f = release + 1; f <= release + 1 + ChargeInput.MaxReleaseGap && f < buffer.Length; f++)
+        for (int f = release + 1; f <= release + 1 + ChargeInput.MaxReleaseGap && f < inputs.BufferSize; f++)
         {
-            if (charge.ChargeDirs.Any(d => d == ClassifyDirection(buffer[f], facingRight)))
+            if (charge.ChargeDirs.Any(d => d == ClassifyDirection(inputs[f], facingRight)))
             {
                 chargeStart = f;
                 break;
@@ -265,9 +326,9 @@ public static class InputQuery
 
         // Step 4: count consecutive ChargeDir frames going further back in time.
         int count = 0;
-        for (int f = chargeStart; f < buffer.Length; f++)
+        for (int f = chargeStart; f < inputs.BufferSize; f++)
         {
-            if (charge.ChargeDirs.Any(d => d == ClassifyDirection(buffer[f], facingRight)))
+            if (charge.ChargeDirs.Any(d => d == ClassifyDirection(inputs[f], facingRight)))
                 count++;
             else
                 break;
@@ -406,20 +467,17 @@ public partial class InputManager : Node
         ReadPlayerInput(match.Player2, P2Bindings);
     }
 
+    // Read live keyboard for this local player and record the frame into the durable per-tick
+    // log. This is the ONLY place `Input.IsKeyPressed` is called. The sim reads through
+    // InputView, which addresses the log by absolute frame — any re-simulation of a past tick
+    // reads the same input back from the same slot.
+    //
+    // When a networked "remote" player exists later, its input source will be a NetworkManager
+    // that calls player.InputLog.Set(...) from received packets instead of this method — same
+    // shape, different writer.
     private void ReadPlayerInput(Player player, InputBindings bindings)
     {
         if (player == null) return;
-
-        var buffer = player.Inputs.Buffer;
-        var consumed = player.Inputs.Consumed;
-
-        // Keep both buffers aligned — consumed shifts with input every frame.
-        for (int i = BufferSize - 1; i > 0; i--)
-        {
-            buffer[i] = buffer[i - 1];
-            consumed[i] = consumed[i - 1];
-        }
-        consumed[0] = default;
 
         bool left  = Input.IsKeyPressed(bindings.Left);
         bool right = Input.IsKeyPressed(bindings.Right);
@@ -430,7 +488,7 @@ public partial class InputManager : Node
         if (left && right) { left = false; right = false; }
         if (up && down)    { up   = false; down  = false; }
 
-        buffer[0] = new InputFrame
+        InputFrame frame = new InputFrame
         {
             Left         = left,
             Right        = right,
@@ -444,5 +502,7 @@ public partial class InputManager : Node
             Grab         = Input.IsKeyPressed(bindings.Grab),
             isDuringHitpause = match.IsInHitPause,
         };
+
+        player.InputLog.Set(match.FrameCount, frame);
     }
 }

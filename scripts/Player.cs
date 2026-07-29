@@ -196,7 +196,7 @@ public struct Box
 public class Move
 {
     public string Name;
-    public System.Func<InputHistory, bool> Condition;
+    public System.Func<InputView, bool> Condition;
     public System.Action Execute;
 }
 
@@ -207,9 +207,19 @@ public partial class Player : Node3D
 
     [Export] public bool ShowDebug = true;
     [Export] public int PlayerNumber = 1;
-    // Input + consumed history for this character. InputManager shifts both each frame.
-    public InputHistory Inputs => inputs;
-    InputHistory inputs;
+    // Durable per-tick record of this player's raw inputs, indexed by absolute FrameCount.
+    // Written once per real physics frame by whoever considers this player local (currently
+    // always InputManager). Any re-simulation reads back from here — never from live keys.
+    public InputLog InputLog { get; private set; }
+    // Per-button "last consumed frame" table. SIM STATE, not input — set by MarkConsumed when
+    // a move fires so the same press can't re-trigger, and any older press of the same button
+    // becomes implicitly consumed too. Struct field (not property) so InputView.SetMarkFor can
+    // mutate in place. Snapshots by struct copy along with the rest of Player state.
+    public ConsumedMarks Marks;
+    // Sim-facing view constructed on demand — bundles the log, this Player (to reach Marks),
+    // and the current tick so extension methods can address inputs by "i frames ago" while
+    // everything underneath is absolute-frame-indexed.
+    public InputView Inputs => new InputView { Log = InputLog, Owner = this, CurrentFrame = Match.FrameCount };
     public PhysicsState physics;
     // Sim-space position (PhysicsScale units). Source of truth for gameplay.
     public int SimX;
@@ -256,7 +266,8 @@ public partial class Player : Node3D
 
     public override void _Ready()
     {
-        inputs = InputHistory.Create(InputManager.BufferSize);
+        InputLog = new InputLog(InputManager.BufferSize);
+        Marks = ConsumedMarks.Empty;
 
         Match = GetNode<MatchManager>("/root/MatchManager");
         Match.RegisterPlayer(this, PlayerNumber);
@@ -283,67 +294,67 @@ public partial class Player : Node3D
             new Move
             {
                 Name = "CrouchingLight",
-                Condition = (input) => physics.IsOnFloor && input.WasJustPressed(currentBufferWindow, f => f.LightAttack, [f => f.Down]) != null && CanCancelInto(MoveType.CrouchLight),
+                Condition = (input) => physics.IsOnFloor && input.WasJustPressed(currentBufferWindow, Button.LightAttack, [Button.Down]) != null && CanCancelInto(MoveType.CrouchLight),
                 Execute = () => StartMove(Moveset.CrouchingLight, PlayerState.CrouchAttacking),
             },
             new Move
             {
                 Name = "AirLight",
-                Condition = (input) => IsAirborneState(currentState) && input.WasJustPressed(currentBufferWindow, f => f.LightAttack) != null && CanCancelInto(MoveType.Light),
+                Condition = (input) => IsAirborneState(currentState) && input.WasJustPressed(currentBufferWindow, Button.LightAttack) != null && CanCancelInto(MoveType.Light),
                 Execute = () => StartMove(Moveset.AirLight, PlayerState.AirAttacking),
             },
             new Move
             {
                 Name = "StandingLight",
-                Condition = (input) => input.WasJustPressed(currentBufferWindow, f => f.LightAttack, null, [f => f.Down]) != null && CanCancelInto(MoveType.Light),
+                Condition = (input) => input.WasJustPressed(currentBufferWindow, Button.LightAttack, null, [Button.Down]) != null && CanCancelInto(MoveType.Light),
                 Execute = () => StartMove(Moveset.StandingLight, PlayerState.StandAttacking),
             },
             new Move
             {
                 Name = "CrouchingMedium",
-                Condition = (input) => physics.IsOnFloor && input.WasJustPressed(currentBufferWindow, f => f.MediumAttack, [f => f.Down]) != null && CanCancelInto(MoveType.CrouchMedium),
+                Condition = (input) => physics.IsOnFloor && input.WasJustPressed(currentBufferWindow, Button.MediumAttack, [Button.Down]) != null && CanCancelInto(MoveType.CrouchMedium),
                 Execute = () => StartMove(Moveset.CrouchingMedium, PlayerState.CrouchAttacking),
             },
             new Move
             {
                 Name = "AirMedium",
-                Condition = (input) => IsAirborneState(currentState) && input.WasJustPressed(currentBufferWindow, f => f.MediumAttack) != null && CanCancelInto(MoveType.Medium),
+                Condition = (input) => IsAirborneState(currentState) && input.WasJustPressed(currentBufferWindow, Button.MediumAttack) != null && CanCancelInto(MoveType.Medium),
                 Execute = () => StartMove(Moveset.AirMedium, PlayerState.AirAttacking),
             },
             new Move
             {
                 Name = "StandingMedium",
-                Condition = (input) => input.WasJustPressed(currentBufferWindow, f => f.MediumAttack, null, [f => f.Down]) != null && CanCancelInto(MoveType.Medium),
+                Condition = (input) => input.WasJustPressed(currentBufferWindow, Button.MediumAttack, null, [Button.Down]) != null && CanCancelInto(MoveType.Medium),
                 Execute = () => StartMove(Moveset.StandingMedium, PlayerState.StandAttacking),
             },
             new Move
             {
                 Name = "CrouchingHeavy",
-                Condition = (input) => physics.IsOnFloor && input.WasJustPressed(currentBufferWindow, f => f.HeavyAttack, [f => f.Down]) != null && CanCancelInto(MoveType.CrouchHeavy),
+                Condition = (input) => physics.IsOnFloor && input.WasJustPressed(currentBufferWindow, Button.HeavyAttack, [Button.Down]) != null && CanCancelInto(MoveType.CrouchHeavy),
                 Execute = () => StartMove(Moveset.CrouchingHeavy, PlayerState.CrouchAttacking),
             },
             new Move
             {
                 Name = "AirHeavy",
-                Condition = (input) => IsAirborneState(currentState) && input.WasJustPressed(currentBufferWindow, f => f.HeavyAttack) != null && CanCancelInto(MoveType.Heavy),
+                Condition = (input) => IsAirborneState(currentState) && input.WasJustPressed(currentBufferWindow, Button.HeavyAttack) != null && CanCancelInto(MoveType.Heavy),
                 Execute = () => StartMove(Moveset.AirHeavy, PlayerState.AirAttacking),
             },
             new Move
             {
                 Name = "StandingHeavy",
-                Condition = (input) => input.WasJustPressed(currentBufferWindow, f => f.HeavyAttack, null, [f => f.Down]) != null && CanCancelInto(MoveType.Heavy),
+                Condition = (input) => input.WasJustPressed(currentBufferWindow, Button.HeavyAttack, null, [Button.Down]) != null && CanCancelInto(MoveType.Heavy),
                 Execute = () => StartMove(Moveset.StandingHeavy, PlayerState.StandAttacking),
             },
             new Move
             {
                 Name = "BackThrow",
-                Condition = (input) => input.WasJustPressed(currentBufferWindow, f => f.Grab, [f => {return GetFacing() == FacingDirection.Right ? f.Left : f.Right;}]) != null && CanCancelInto(MoveType.Grab) && CanUseGrab(),
+                Condition = (input) => input.WasJustPressed(currentBufferWindow, Button.Grab, [GetFacing() == FacingDirection.Right ? Button.Left : Button.Right]) != null && CanCancelInto(MoveType.Grab) && CanUseGrab(),
                 Execute = () => StartMove(Moveset.BackGrab, PlayerState.GrabOccurring),
             },
             new Move
             {
                 Name = "FowardThrow",
-                Condition = (input) => input.WasJustPressed(currentBufferWindow, f => f.Grab) != null && CanCancelInto(MoveType.Grab) && CanUseGrab(),
+                Condition = (input) => input.WasJustPressed(currentBufferWindow, Button.Grab) != null && CanCancelInto(MoveType.Grab) && CanUseGrab(),
                 Execute = () => StartMove(Moveset.FowardGrab, PlayerState.GrabOccurring),
             },
         };
@@ -427,7 +438,7 @@ public partial class Player : Node3D
             TransitionTo(PlayerState.AirBlockstun);
             return;
         }
-        else if (inputs[0].Down)
+        else if (Inputs[0].Down)
         {
             TransitionTo(PlayerState.CrouchBlockstun);
             return;
@@ -446,18 +457,18 @@ public partial class Player : Node3D
         {
             case MoveType.Light:
             case MoveType.CrouchLight:
-                inputs.MarkConsumed(currentBufferWindow, f => f.LightAttack, c => { c.LightAttack = true; return c; });
+                Inputs.MarkConsumed(currentBufferWindow, Button.LightAttack);
                 break;
             case MoveType.Medium:
             case MoveType.CrouchMedium:
-                inputs.MarkConsumed(currentBufferWindow, f => f.MediumAttack, c => { c.MediumAttack = true; return c; });
+                Inputs.MarkConsumed(currentBufferWindow, Button.MediumAttack);
                 break;
             case MoveType.Heavy:
             case MoveType.CrouchHeavy:
-                inputs.MarkConsumed(currentBufferWindow, f => f.HeavyAttack, c => { c.HeavyAttack = true; return c; });
+                Inputs.MarkConsumed(currentBufferWindow, Button.HeavyAttack);
                 break;
             case MoveType.Grab:
-                inputs.MarkConsumed(currentBufferWindow, f => f.Grab, c => { c.Grab = true; return c; });
+                Inputs.MarkConsumed(currentBufferWindow, Button.Grab);
                 break;
         }
 
@@ -641,11 +652,11 @@ public partial class Player : Node3D
         bool attackerIsToRight = attacker.SimX > SimX;
 
         // If were currently correctly holding away from the attacker, we are holding back
-        bool holdingBackNow = attackerIsToRight ? inputs[0].Left : inputs[0].Right;
+        bool holdingBackNow = attackerIsToRight ? Inputs[0].Left : Inputs[0].Right;
         if (holdingBackNow) return true;
 
         // If in the last bit of time we crossed up, we are always holding back if were not holding neutral
-        bool holdingNeutral = !inputs[0].Left && !inputs[0].Right;
+        bool holdingNeutral = !Inputs[0].Left && !Inputs[0].Right;
         if (holdingNeutral) return false;
         for (int i = 0; i <= PlayerConstants.CrossupProtectionWindow; i++)
         {
@@ -667,10 +678,10 @@ public partial class Player : Node3D
         if (IsAirborneState(currentState)) return true; // airblocks always work
 
         if (data.IsLow)
-            return inputs[0].Down;
+            return Inputs[0].Down;
 
         if (data.IsOverhead)
-            return !inputs[0].Down;  
+            return !Inputs[0].Down;  
 
         return true;              // mid are always blocked
     }
@@ -753,8 +764,8 @@ public partial class Player : Node3D
         int mostRecentPress = -1;
         for (int i = 0; i < PlayerConstants.BufferWindow; i++)
         {
-            bool curFrame  = inputIsRight ? inputs[i].Right     : inputs[i].Left;
-            bool prevFrame = inputIsRight ? inputs[i + 1].Right : inputs[i + 1].Left;
+            bool curFrame  = inputIsRight ? Inputs[i].Right     : Inputs[i].Left;
+            bool prevFrame = inputIsRight ? Inputs[i + 1].Right : Inputs[i + 1].Left;
 
             if (curFrame && !prevFrame)
             {
@@ -770,8 +781,8 @@ public partial class Player : Node3D
 
         for (int i = searchStart; i < searchEnd; i++)
         {
-            bool curFrame  = inputIsRight ? inputs[i].Right     : inputs[i].Left;
-            bool prevFrame = inputIsRight ? inputs[i + 1].Right : inputs[i + 1].Left;
+            bool curFrame  = inputIsRight ? Inputs[i].Right     : Inputs[i].Left;
+            bool prevFrame = inputIsRight ? Inputs[i + 1].Right : Inputs[i + 1].Left;
 
             if (curFrame && !prevFrame)
                 return true;
@@ -785,9 +796,9 @@ public partial class Player : Node3D
         if (dashCooldown > 0) return false;
         bool forwardIsRight = GetFacing() == FacingDirection.Right;
         bool dashMacro = forwardIsRight
-            ? inputs.WasJustPressed(PlayerConstants.BufferWindow, f => f.Dash, [f => f.Right]) != null
-            : inputs.WasJustPressed(PlayerConstants.BufferWindow, f => f.Dash, [f => f.Left]) != null;
-        bool neutralDashPressed = inputs[0].Dash && !inputs[0].Left && !inputs[0].Right;
+            ? Inputs.WasJustPressed(PlayerConstants.BufferWindow, Button.Dash, [Button.Right]) != null
+            : Inputs.WasJustPressed(PlayerConstants.BufferWindow, Button.Dash, [Button.Left]) != null;
+        bool neutralDashPressed = Inputs[0].Dash && !Inputs[0].Left && !Inputs[0].Right;
         return dashMacro || IsDoubleTap(forwardIsRight) || neutralDashPressed;
     }
 
@@ -795,8 +806,8 @@ public partial class Player : Node3D
     {
         bool backIsRight = GetFacing() == FacingDirection.Left;
         bool dashMacro = backIsRight
-            ? inputs.WasJustPressed(PlayerConstants.BufferWindow, f => f.Dash, [f => f.Right]) != null
-            : inputs.WasJustPressed(PlayerConstants.BufferWindow, f => f.Dash, [f => f.Left]) != null;
+            ? Inputs.WasJustPressed(PlayerConstants.BufferWindow, Button.Dash, [Button.Right]) != null
+            : Inputs.WasJustPressed(PlayerConstants.BufferWindow, Button.Dash, [Button.Left]) != null;
 
         return dashMacro || IsDoubleTap(backIsRight);
     }
@@ -813,31 +824,31 @@ public partial class Player : Node3D
         ApplyVelocity();
         ResolveFloorCollision();
 
-        if (inputs.WasMotion(GetFacing() == FacingDirection.Right, MotionInputs.QCF))
+        if (Inputs.WasMotion(GetFacing() == FacingDirection.Right, MotionInputs.QCF))
         {
             GD.Print("QCF");
         }
-        if (inputs.WasMotion(GetFacing() == FacingDirection.Right, MotionInputs.QCB))
+        if (Inputs.WasMotion(GetFacing() == FacingDirection.Right, MotionInputs.QCB))
         {
             GD.Print("QCB");
         }
-        if (inputs.WasMotion(GetFacing() == FacingDirection.Right, MotionInputs.HCF))
+        if (Inputs.WasMotion(GetFacing() == FacingDirection.Right, MotionInputs.HCF))
         {
             GD.Print("HCF");
         }
-        if (inputs.WasMotion(GetFacing() == FacingDirection.Right, MotionInputs.HCB))
+        if (Inputs.WasMotion(GetFacing() == FacingDirection.Right, MotionInputs.HCB))
         {
             GD.Print("HCB");
         }
-        if (inputs.WasMotion(GetFacing() == FacingDirection.Right, MotionInputs.DP))
+        if (Inputs.WasMotion(GetFacing() == FacingDirection.Right, MotionInputs.DP))
         {
             GD.Print("DP");
         }
-        if (inputs.WasCharge(GetFacing() == FacingDirection.Right, ChargeInputs.BackForward))
+        if (Inputs.WasCharge(GetFacing() == FacingDirection.Right, ChargeInputs.BackForward))
         {
             GD.Print("BackForward");
         }
-        if (inputs.WasCharge(GetFacing() == FacingDirection.Right, ChargeInputs.DownUp))
+        if (Inputs.WasCharge(GetFacing() == FacingDirection.Right, ChargeInputs.DownUp))
         {
             GD.Print("DownUp");
         }
@@ -1067,7 +1078,7 @@ public partial class Player : Node3D
             if (cancel != null) { cancel.Execute(); return; }
 
             // We also wanna check if we can cancel into some other stuff, like jumping
-            else if(CanCancelInto(MoveType.Jump) && inputs.WasJustPressed(PlayerConstants.BufferWindow, f => f.Jump) != null)
+            else if(CanCancelInto(MoveType.Jump) && Inputs.WasJustPressed(PlayerConstants.BufferWindow, Button.Jump) != null)
             {
                 JumpType jumpType = currentMove.Blocked ? JumpType.Normal : JumpType.Combo;
                 Jump(Stats.JumpForce, jumpType);
@@ -1107,7 +1118,7 @@ public partial class Player : Node3D
             if (cancel != null) { cancel.Execute(); return; }
             
             // We also wanna check if we can cancel into some other stuff, like jumping
-            else if(CanCancelInto(MoveType.Jump) && inputs.WasJustPressed(PlayerConstants.BufferWindow, f => f.Jump) != null)
+            else if(CanCancelInto(MoveType.Jump) && Inputs.WasJustPressed(PlayerConstants.BufferWindow, Button.Jump) != null)
             {
                 // Combo jumps are done by just jumping, no jumpsquat
                 JumpType jumpType = currentMove.Blocked ? JumpType.Normal : JumpType.Combo;
@@ -1147,7 +1158,7 @@ public partial class Player : Node3D
             if (cancel != null) { cancel.Execute(); return; }
 
             // We also wanna check if we can cancel into some other stuff, like jumping
-            else if (CanCancelInto(MoveType.Jump) && inputs.WasJustPressed(PlayerConstants.BufferWindow, f => f.Jump) != null && jump.HasDoubleJump)
+            else if (CanCancelInto(MoveType.Jump) && Inputs.WasJustPressed(PlayerConstants.BufferWindow, Button.Jump) != null && jump.HasDoubleJump)
             {
                 JumpType jumpType = currentMove.Blocked ? JumpType.Normal : JumpType.Combo;
                 Jump(Stats.DoubleJumpForce, jumpType);
@@ -1233,7 +1244,7 @@ public partial class Player : Node3D
         if (TryStartAttack()) return;
         if (TryStartJump(onHold: false)) return;
 
-        if (!inputs[0].Down)
+        if (!Inputs[0].Down)
             TransitionTo(PlayerState.Idle);
     }
 
@@ -1255,7 +1266,7 @@ public partial class Player : Node3D
     {
         foreach (var move in moveList)
         {
-            if (move.Condition(inputs))
+            if (move.Condition(Inputs))
             {
                 return move;
             }
@@ -1282,8 +1293,8 @@ public partial class Player : Node3D
     protected bool TryStartJump(bool onHold)
     {
         bool jumpInput = onHold
-            ? inputs.WasHeld(PlayerConstants.BufferWindow, f => f.Jump)
-            : inputs.WasJustPressed(PlayerConstants.BufferWindow, f => f.Jump) != null;
+            ? Inputs.WasHeld(PlayerConstants.BufferWindow, Button.Jump)
+            : Inputs.WasJustPressed(PlayerConstants.BufferWindow, Button.Jump) != null;
         if (!jumpInput) return false;
         JumpSquat();
         TransitionTo(PlayerState.JumpSquat);
@@ -1292,7 +1303,7 @@ public partial class Player : Node3D
 
     protected bool TryStartCrouch()
     {
-        if (!inputs[0].Down) return false;
+        if (!Inputs[0].Down) return false;
         TransitionTo(PlayerState.Crouching);
         return true;
     }
@@ -1321,7 +1332,7 @@ public partial class Player : Node3D
         if (TryForwardDash()) return;
         if (TryBackdash()) return;
 
-        if (inputs[0].Right || inputs[0].Left)
+        if (Inputs[0].Right || Inputs[0].Left)
             TransitionTo(PlayerState.Walking);
     }
 
@@ -1335,7 +1346,7 @@ public partial class Player : Node3D
         if (TryForwardDash()) return;
         if (TryBackdash()) return;
 
-        if (!(inputs[0].Right || inputs[0].Left))
+        if (!(Inputs[0].Right || Inputs[0].Left))
             TransitionTo(PlayerState.Idle);
     }
 
@@ -1353,8 +1364,8 @@ public partial class Player : Node3D
         // Returning to walk/idle is locked out until the dash has run for its minimum duration.
         if (groundDashFrame < Stats.MinDashDuration) return;
 
-        bool backHeld = GetFacing() == FacingDirection.Right ? inputs[0].Left : inputs[0].Right;
-        if (!(inputs[0].Right || inputs[0].Left) && !inputs[0].Dash)
+        bool backHeld = GetFacing() == FacingDirection.Right ? Inputs[0].Left : Inputs[0].Right;
+        if (!(Inputs[0].Right || Inputs[0].Left) && !Inputs[0].Dash)
             // Holding dash keeps dashing forward.
             TransitionTo(PlayerState.Idle);
         else if (backHeld)
@@ -1398,7 +1409,7 @@ public partial class Player : Node3D
         {
             usedMove.Execute();
         }
-        else if (inputs.WasJustPressed(PlayerConstants.BufferWindow, f => f.Jump) is InputFrame jumpPress && jump.HasDoubleJump && jump.FramesSinceLastJump >= Stats.FramesUntilActionableAfterJump)
+        else if (Inputs.WasJustPressed(PlayerConstants.BufferWindow, Button.Jump) is InputFrame jumpPress && jump.HasDoubleJump && jump.FramesSinceLastJump >= Stats.FramesUntilActionableAfterJump)
         {
             JumpType jumptype = JumpType.Normal;
             updateFacing(true); 
@@ -1518,9 +1529,9 @@ public partial class Player : Node3D
 
     protected virtual void HandleGroundedMovement()
     {
-        if (inputs[0].Right)
+        if (Inputs[0].Right)
             physics.VelocityX = Stats.Speed;
-        else if (inputs[0].Left) 
+        else if (Inputs[0].Left) 
             physics.VelocityX = -Stats.Speed;
         else
             Decelerate();
@@ -1627,7 +1638,7 @@ public partial class Player : Node3D
         // Prefer the direction held at the jump press edge (respects buffered inputs). When jump is
         // held through a landing there is no fresh press edge, so fall back to the currently held
         // direction — this lets hold-jump bunny-hopping keep its forward/back momentum.
-        InputFrame source = inputs.WasJustPressed(PlayerConstants.BufferWindow, f => f.Jump) ?? inputs[0];
+        InputFrame source = Inputs.WasJustPressed(PlayerConstants.BufferWindow, Button.Jump) ?? Inputs[0];
         if (source.Right) jump.jumpDirection = 1;
         else if (source.Left) jump.jumpDirection = -1;
         else jump.jumpDirection = 0;
