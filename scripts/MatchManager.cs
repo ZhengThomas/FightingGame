@@ -17,27 +17,30 @@ public partial class MatchManager : Node
 {
     public const int StateHistorySize = 60;
     GameState[] stateHistory = new GameState[StateHistorySize];
-    int stateHistoryHead = 0; // index of the next slot to write
+
+    // Ring-buffer slot for a given absolute frame number. Using FrameCount as the sole source
+    // of truth for indexing means a rollback that restores FrameCount automatically restores
+    // where subsequent reads/writes land — no separate head counter to keep in sync.
+    private static int SlotFor(int frame) => ((frame % StateHistorySize) + StateHistorySize) % StateHistorySize;
 
     // Records the current positions into the ring buffer.
-    // Call this after all position resolution for the frame is complete.
+    // Called from Tick AFTER FrameCount has been incremented, so `FrameCount - 1` is the frame
+    // that just finished — that's the slot we write to.
     private void RecordGameState()
     {
-        stateHistory[stateHistoryHead] = new GameState
+        stateHistory[SlotFor(FrameCount - 1)] = new GameState
         {
             P1SimX = Player1?.SimX ?? 0,
             P1SimY = Player1?.SimY ?? 0,
             P2SimX = Player2?.SimX ?? 0,
             P2SimY = Player2?.SimY ?? 0,
         };
-        stateHistoryHead = (stateHistoryHead + 1) % StateHistorySize;
     }
 
-    // framesAgo = 0 → most recently recorded frame, 1 → one frame before that, etc.
+    // framesAgo = 0 → the frame that most recently finished, 1 → one frame before that, etc.
     public GameState GetGameState(int framesAgo)
     {
-        int index = (stateHistoryHead - 1 - framesAgo + StateHistorySize) % StateHistorySize;
-        return stateHistory[index];
+        return stateHistory[SlotFor(FrameCount - 1 - framesAgo)];
     }
 
     public (int attackerX, int defenderX) GetHistoricalSimX(Player attacker, Player defender, int framesAgo)
@@ -50,7 +53,12 @@ public partial class MatchManager : Node
 
     public Player Player1 { get; private set; }
     public Player Player2 { get; private set; }
+    // Physics-frame tick number. Always advances while ShouldTick is true, INCLUDING during
+    // hit pause — this is what indexes InputLog slots and Ticks-in-a-match-so-far uses like
+    // attack ID generation, so those need to keep progressing even when the sim body is frozen.
     public int FrameCount { get; private set; } = 0;
+    // Sim-progress tick number. Advances only on frames non hit puase frames
+    public int SimFrame { get; private set; } = 0;
 	public DebugDraw DebugDraw { get; private set; }
 	public int p1xLastFrame { get; private set; } = PlayerConstants.ToSim(-1.5f);
 	public int p2xLastFrame { get; private set; } = PlayerConstants.ToSim(1.5f);
@@ -238,37 +246,36 @@ public partial class MatchManager : Node
 
 	public override void _PhysicsProcess(double delta)
 	{
-		if (debug.ShouldTick)
+		if (debug.ShouldTick) Tick();
+		DrawDebugBoxes();
+	}
+
+	// Advance the simulation by exactly one tick. Safe to call multiple times in a row for rollback
+	public void Tick()
+	{
+		if (!IsInHitPause)
 		{
-			if (!IsInHitPause)
-			{
-				TransferCornerPushback();
-				Player1?.Tick();
-				Player2?.Tick();
-				EnforceStageBoundaries();
-				ResolvePushboxCollision();
-				EnforceStageBoundaries();
-				ResolveHitboxCollision();
-
-				// Fire the animator/VFX clock AFTER hit resolution so a hit that lands this tick
-				// pushes the defender into Hitstun before the animator picks its clip. This
-				// is for game feel
-				Player1?.EmitTickSignal();
-				Player2?.EmitTickSignal();
-			}
-			else
-			{
-				hitPauseFramesRemaining--;
-			}
-
-			if (Player1 != null) p1xLastFrame = Player1.SimX;
-			if (Player2 != null) p2xLastFrame = Player2.SimX;
-
-			FrameCount++;
-			RecordGameState();
+			TransferCornerPushback();
+			Player1?.Tick();
+			Player2?.Tick();
+			EnforceStageBoundaries();
+			ResolvePushboxCollision();
+			EnforceStageBoundaries();
+			ResolveHitboxCollision();
+			// Only advance the presentation clock on frames the sim body ran — during hit pause
+			// this counter freezes and any polling observer (animator, VFX) sees ticksElapsed 0.
+			SimFrame++;
+		}
+		else
+		{
+			hitPauseFramesRemaining--;
 		}
 
-		DrawDebugBoxes();
+		if (Player1 != null) p1xLastFrame = Player1.SimX;
+		if (Player2 != null) p2xLastFrame = Player2.SimX;
+
+		FrameCount++;
+		RecordGameState();
 	}
 
 	private void ResolveHitboxCollision()

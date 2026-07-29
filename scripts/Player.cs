@@ -202,9 +202,6 @@ public class Move
 
 public partial class Player : Node3D
 {
-    // Emitted at the end of every simulation tick. Used as the animation clock.
-    [Signal] public delegate void TickedEventHandler();
-
     [Export] public bool ShowDebug = true;
     [Export] public int PlayerNumber = 1;
     // Durable per-tick record of this player's raw inputs, indexed by absolute FrameCount.
@@ -853,12 +850,6 @@ public partial class Player : Node3D
             GD.Print("DownUp");
         }
     }
-
-    // MatchManager fires this at the end of each simulation tick, AFTER hit/pushbox resolution,
-    // so listeners (animator, VFX) see the post-collision state. Firing it inside Tick() would
-    // leave the defender's animator one frame behind on hit — the hurt clip's first frame would
-    // then only appear once hit pause ends, killing the impact read.
-    public void EmitTickSignal() => EmitSignal(SignalName.Ticked);
 
     protected virtual void ApplyGravity()
     {

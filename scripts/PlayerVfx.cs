@@ -50,13 +50,47 @@ public partial class PlayerVfx : Node3D
             return;
         }
 
-        // Same clock as the animator: one update per simulation tick.
-        player.Ticked += OnTick;
+        // No Ticked-signal subscription: opacity is a pure function of the active move's frame
+        // counter, so we can just poll from _Process each real frame. Idempotent — safe under
+        // rollback catch-up, since we always compute from the (post-resim) current sim state.
     }
 
-    // Keep the slash shaders' plane_distance equal to the camera distance, exactly like PlayerAnimator
-    // does for the body, so the slash flattens/scales consistently with the characters at any zoom.
+    // Runs every real frame. Two independent jobs:
+    //   1. Poll current move state and drive slash opacity from the move's frame counter.
+    //   2. Keep the slash shaders' plane_distance synced to the camera, like PlayerAnimator
+    //      does for the body — same reason (perspective/scale consistency at any zoom).
     public override void _Process(double delta)
+    {
+        UpdateSlashOpacity();
+        UpdateShaderParams();
+    }
+
+    protected virtual void UpdateSlashOpacity()
+    {
+        if (player == null) return;
+
+        string desiredPath = "";
+        float alpha = 0f;
+
+        if (player.IsAttacking() && player.CurrentMove is ActiveMove move
+            && move.Data is MoveData data && data.Vfx.HasScene)
+        {
+            // The first active frame is Startup + 1 (see Player move-frame logic); count from there.
+            int framesSinceSpawn = move.Frame - (data.Startup + 1);
+            desiredPath = data.Vfx.ScenePath;
+            alpha = data.Vfx.AlphaAt(framesSinceSpawn);
+        }
+
+        // If we switched to a different slash (or stopped attacking), hide the previous one.
+        if (activePath != "" && activePath != desiredPath)
+            SetOpacity(activePath, 0f);
+
+        activePath = desiredPath;
+        if (desiredPath != "")
+            SetOpacity(desiredPath, alpha);
+    }
+
+    protected virtual void UpdateShaderParams()
     {
         if (slashMaterials.Count == 0)
             return;
@@ -80,29 +114,6 @@ public partial class PlayerVfx : Node3D
             mat.SetShaderParameter("plane_distance", planeDist);
             mat.SetShaderParameter("depth_bias", depthBias);
         }
-    }
-
-    protected virtual void OnTick()
-    {
-        string desiredPath = "";
-        float alpha = 0f;
-
-        if (player.IsAttacking() && player.CurrentMove is ActiveMove move
-            && move.Data is MoveData data && data.Vfx.HasScene)
-        {
-            // The first active frame is Startup + 1 (see Player move-frame logic); count from there.
-            int framesSinceSpawn = move.Frame - (data.Startup + 1);
-            desiredPath = data.Vfx.ScenePath;
-            alpha = data.Vfx.AlphaAt(framesSinceSpawn);
-        }
-
-        // If we switched to a different slash (or stopped attacking), hide the previous one.
-        if (activePath != "" && activePath != desiredPath)
-            SetOpacity(activePath, 0f);
-
-        activePath = desiredPath;
-        if (desiredPath != "")
-            SetOpacity(desiredPath, alpha);
     }
 
     protected void SetOpacity(string scenePath, float alpha)

@@ -75,6 +75,11 @@ public partial class PlayerAnimator : Node3D
     // Last seen Player.ReactionFlashId — used to restart hurt/block clips on re-hit.
     protected int lastReactionFlashId = -1;
     protected int transitionTicksLeft;
+    // Last SimFrame we polled. Compared against Match.SimFrame each _Process to detect how many
+    // sim ticks have elapsed since our last update — usually 1, but can be several during a
+    // rollback catch-up, and 0 during hit pause (SimFrame is the "non-hit-pause tick" counter,
+    // which naturally freezes the animation clock without any extra flag on our side).
+    protected int lastObservedSimFrame = 0;
     // While a one-shot transition is playing, a state change only cuts it short if the incoming
     // state's priority is >= this threshold. Locomotion sits below every threshold, so wandering
     // between idle/walk can't cancel a stop/turn clip; committing to a jump/crouch/attack can.
@@ -151,11 +156,10 @@ public partial class PlayerAnimator : Node3D
 
         prevState = player.CurrentState;
 
-        // Player fires this once per simulation tick; that's our animation clock.
-        player.Ticked += OnTick;
-
         // Apply an initial pose (frame 0 of idle) so we don't sit in the bind/T-pose.
-        UpdatePose();
+        // No Ticked-signal subscription: _Process polls Match.FrameCount and drives the
+        // animation clock itself, so rollback catch-up ticks are absorbed silently.
+        UpdatePose(1);
         animPlayer?.Advance(0.0);
     }
 
@@ -227,10 +231,46 @@ public partial class PlayerAnimator : Node3D
             ApplyHybridToNode(child, bodyShader, outlineShader);
     }
 
-    // Keeps the hybrid shader's plane_distance equal to the camera's current distance to the fight
-    // plane (z = 0). This makes the character scale with the perspective world at every zoom level,
-    // so it no longer grows relative to the stage (which caused ground/walls to clip in when zoomed).
+    // Runs every real (wall-clock) frame. Does two independent jobs:
+    //   1. Polls the sim's tick counter and advances the animation by however many ticks
+    //      elapsed since last poll — usually 1 during normal play; can be several after a
+    //      rollback resim, in which case one call absorbs all the catch-up without visibly
+    //      replaying each intermediate state's clip.
+    //   2. Keeps the hybrid-projection shader's plane_distance synced to the camera so the
+    //      character scales consistently with the perspective world at every zoom level.
     public override void _Process(double delta)
+    {
+        StepAnimationFromSim();
+        UpdateHybridProjection();
+    }
+
+    // Run state-change detection every real frame — even if the sim didn't advance since our
+    // last poll (hit pause, or a rollback that restored SimFrame to what it was before). This
+    // catches the rollback case: an under-the-hood state swap (say Jumping → StandAttacking
+    // with the same SimFrame value on either side of a resim) still needs the animator to
+    // observe "state changed, pick the correct clip" and crossfade to the right visual.
+    //
+    // Only advance the animation CLOCK if SimFrame actually moved forward. In normal play
+    // ticksElapsed is 1 and everything progresses one tick; in rollback-with-same-SimFrame
+    // ticksElapsed is 0 and PlayClip(...)/Seek runs but Advance doesn't, so the new clip
+    // crossfades in from frame 0. Godot's Play(name, blend) handles the crossfade internally.
+    protected virtual void StepAnimationFromSim()
+    {
+        if (player == null || model == null || matchManager == null)
+            return;
+
+        int currentSimFrame = matchManager.SimFrame;
+        int ticksElapsed = currentSimFrame - lastObservedSimFrame;
+
+        UpdatePose(ticksElapsed);
+        if (ticksElapsed > 0)
+        {
+            animPlayer?.Advance(PlayerConstants.FixedDelta * ticksElapsed);
+            lastObservedSimFrame = currentSimFrame;
+        }
+    }
+
+    protected virtual void UpdateHybridProjection()
     {
         if (!UseHybridProjection || hybridMaterials.Count == 0)
             return;
@@ -258,19 +298,10 @@ public partial class PlayerAnimator : Node3D
         }
     }
 
-    // Called once per game tick (via Player.Ticked). Advances the animation by exactly one tick.
-    protected virtual void OnTick()
-    {
-        if (player == null || model == null)
-            return;
-
-        UpdatePose();
-        // Step the animation forward by a single fixed tick's worth of time.
-        animPlayer?.Advance(PlayerConstants.FixedDelta);
-    }
-
     // Sets facing (mirror) and runs the clip-selection logic, without advancing time.
-    protected virtual void UpdatePose()
+    // `ticksElapsed` is passed through to UpdateAnimation so the transition-clip countdown
+    // decrements the right amount when a rollback catch-up covers multiple sim ticks.
+    protected virtual void UpdatePose(int ticksElapsed)
     {
         // Face the opponent: editor pose faces right, facing left mirrors it across X (a flip, not a turn).
         Basis basis = player.GetFacing() == FacingDirection.Left
@@ -278,7 +309,7 @@ public partial class PlayerAnimator : Node3D
             : modelBaseBasis;
         model.Transform = new Transform3D(basis, modelBaseOrigin);
 
-        UpdateAnimation();
+        UpdateAnimation(ticksElapsed);
     }
 
     // Animation "commitment" priorities. A one-shot transition clip that's playing is only cut short
@@ -298,12 +329,13 @@ public partial class PlayerAnimator : Node3D
             ? PriorityLocomotion
             : PriorityAction;
 
-    // Every tick:
+    // Every poll:
     //  - On a state change, (re)start that transition's clip or the loop — but only if we're not
     //    already inside a protected transition that the incoming state isn't allowed to cancel.
-    //  - Always count down the running transition; once it's done, resolve to the loop for whatever
-    //    state we're in *now* (so a dash-stop that finishes while holding back lands on walk-back).
-    protected virtual void UpdateAnimation()
+    //  - Always count down the running transition by `ticksElapsed` (usually 1, larger under
+    //    rollback catch-up); once it's done, resolve to the loop for whatever state we're in
+    //    *now* (so a dash-stop that finishes while holding back lands on walk-back).
+    protected virtual void UpdateAnimation(int ticksElapsed)
     {
         PlayerState state = player.CurrentState;
         int moveId = player.IsAttacking() ? (player.CurrentMove?.Id ?? -1) : -1;
@@ -347,9 +379,12 @@ public partial class PlayerAnimator : Node3D
         {
             if (transitionTicksLeft > 0)
             {
-                transitionTicksLeft--;
-                if (transitionTicksLeft == 0)
+                transitionTicksLeft -= ticksElapsed;
+                if (transitionTicksLeft <= 0)
+                {
+                    transitionTicksLeft = 0;
                     PlayLoop();
+                }
             }
             else
             {
