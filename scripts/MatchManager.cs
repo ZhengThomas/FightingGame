@@ -3,51 +3,75 @@ using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 
-// Snapshot of world state at a single frame.
-// Expand this as rollback needs grow (velocities, player states, health, etc.)
-public struct GameState
-{
-    public int P1SimX;
-    public int P1SimY;
-    public int P2SimX;
-    public int P2SimY;
-}
-
 public partial class MatchManager : Node
 {
     public const int StateHistorySize = 60;
-    GameState[] stateHistory = new GameState[StateHistorySize];
+    Snapshot[] stateHistory = new Snapshot[StateHistorySize];
 
     // Ring-buffer slot for a given absolute frame number. Using FrameCount as the sole source
     // of truth for indexing means a rollback that restores FrameCount automatically restores
     // where subsequent reads/writes land — no separate head counter to keep in sync.
     private static int SlotFor(int frame) => ((frame % StateHistorySize) + StateHistorySize) % StateHistorySize;
 
-    // Records the current positions into the ring buffer.
+    // Pack every sim-critical field on this MatchManager into a MatchSnapshot for rollback
+    // storage. Player-node references are absent — frontPlayer is stored by number.
+    public MatchSnapshot CaptureMatchSnapshot() => new MatchSnapshot
+    {
+        FrameCount = FrameCount,
+        SimFrame = SimFrame,
+        HitPauseFramesRemaining = hitPauseFramesRemaining,
+        P1xLastFrame = p1xLastFrame,
+        P2xLastFrame = p2xLastFrame,
+        FrontPlayerNumber = frontPlayerNumber,
+    };
+
+    // Overwrite every sim-critical field on this MatchManager from a MatchSnapshot.
+    public void RestoreMatchSnapshot(MatchSnapshot s)
+    {
+        FrameCount = s.FrameCount;
+        SimFrame = s.SimFrame;
+        hitPauseFramesRemaining = s.HitPauseFramesRemaining;
+        p1xLastFrame = s.P1xLastFrame;
+        p2xLastFrame = s.P2xLastFrame;
+        frontPlayerNumber = s.FrontPlayerNumber;
+    }
+
+    // Capture the full sim state (MatchManager + both players) into one struct — the unit
+    // that lives in the rolling history buffer and, later, the primitive a rollback controller
+    // will hand to RestoreSnapshot to rewind time.
+    public Snapshot CaptureSnapshot() => new Snapshot
+    {
+        Match = CaptureMatchSnapshot(),
+        P1 = Player1?.CaptureSnapshot() ?? default,
+        P2 = Player2?.CaptureSnapshot() ?? default,
+    };
+
+    public void RestoreSnapshot(Snapshot s)
+    {
+        RestoreMatchSnapshot(s.Match);
+        Player1?.RestoreSnapshot(s.P1);
+        Player2?.RestoreSnapshot(s.P2);
+    }
+
+    // Records the current full-match snapshot into the ring buffer.
     // Called from Tick AFTER FrameCount has been incremented, so `FrameCount - 1` is the frame
     // that just finished — that's the slot we write to.
     private void RecordGameState()
     {
-        stateHistory[SlotFor(FrameCount - 1)] = new GameState
-        {
-            P1SimX = Player1?.SimX ?? 0,
-            P1SimY = Player1?.SimY ?? 0,
-            P2SimX = Player2?.SimX ?? 0,
-            P2SimY = Player2?.SimY ?? 0,
-        };
+        stateHistory[SlotFor(FrameCount - 1)] = CaptureSnapshot();
     }
 
     // framesAgo = 0 → the frame that most recently finished, 1 → one frame before that, etc.
-    public GameState GetGameState(int framesAgo)
+    public Snapshot GetGameState(int framesAgo)
     {
         return stateHistory[SlotFor(FrameCount - 1 - framesAgo)];
     }
 
     public (int attackerX, int defenderX) GetHistoricalSimX(Player attacker, Player defender, int framesAgo)
     {
-        GameState state = GetGameState(framesAgo);
-        int ax = attacker == Player1 ? state.P1SimX : state.P2SimX;
-        int dx = defender == Player1 ? state.P1SimX : state.P2SimX;
+        Snapshot state = GetGameState(framesAgo);
+        int ax = attacker == Player1 ? state.P1.SimX : state.P2.SimX;
+        int dx = defender == Player1 ? state.P1.SimX : state.P2.SimX;
         return (ax, dx);
     }
 
@@ -71,13 +95,14 @@ public partial class MatchManager : Node
 	// Draw order: which player's mesh should render on top where the two overlap (like GGST).
 	// Defaults to Player 1; whoever lands a hit or grab most recently is brought to the front.
 	// PlayerAnimator reads FrontPlayer and applies a depth-only bias in the shader (no size change).
-	Player frontPlayer;
-	public Player FrontPlayer => frontPlayer ?? Player1;
+	// Stored as player number (1/2, 0 = unset → defaults to Player1) so it snapshots by copy.
+	int frontPlayerNumber = 0;
+	public Player FrontPlayer => PlayerFromNumber(frontPlayerNumber) ?? Player1;
 
 	// Bring a player to the front layer (draw-order only, no gameplay effect). Called when a player
 	// starts an attack so the attacker — and its slash VFX — draw over the opponent, GGST-style,
 	// even before the hit connects.
-	public void BringToFront(Player player) => frontPlayer = player;
+	public void BringToFront(Player player) => frontPlayerNumber = player?.PlayerNumber ?? 0;
 
 	DebugManager debug;
 	InputManager inputManager;
@@ -118,6 +143,14 @@ public partial class MatchManager : Node
         if (playerNumber == 1) Player1 = player;
         else Player2 = player;
     }
+
+    // Get a player reference given a number
+    public Player PlayerFromNumber(int number) => number switch
+    {
+        1 => Player1,
+        2 => Player2,
+        _ => null,
+    };
 
 	// Box.Width/Height are HALF-extents in sim units, so we use them directly.
 	private static void BoxExtents(int originX, int originY, Box box, out int left, out int right, out int bottom, out int top)
@@ -292,11 +325,11 @@ public partial class MatchManager : Node
 
 		int facingMult = attacker.GetFacing() == FacingDirection.Right ? 1 : -1;
 
-		foreach (ActiveMove attack in attacker.GetActiveMoves())
+		foreach (ActiveMoveState attack in attacker.GetActiveMoves())
 		{
-			if (defender.WasAlreadyHitBy(attack.Id)) continue;
+			if (defender.WasAlreadyHitBy(attack.InstanceId)) continue;
 
-			List<Box> hitboxes = attack.GetCurrentHitboxes();
+			List<Box> hitboxes = attacker.GetCurrentHitboxes();
 			if (hitboxes.Count == 0) continue;
 
 			foreach (Box hitbox in hitboxes)
@@ -318,17 +351,17 @@ public partial class MatchManager : Node
 						{
 							if(defender.InGrabbableState())
 							{
-								defender.GetGrabbed(grabData, attack.Id, attacker);
+								defender.GetGrabbed(grabData, attack.InstanceId, attacker);
 								attacker.RegisterGrab(defender, grabData);
-								frontPlayer = attacker;
+								frontPlayerNumber = attacker.PlayerNumber;
 							}
 						}
 						else if (attack.Data is AttackData hitData)
 						{
-							bool blocked = defender.TakeHit(hitData, attack.Id, attackDir, attacker);
-							attacker.RegisterHit(attack.Id, blocked);
+							bool blocked = defender.TakeHit(hitData, attack.InstanceId, attackDir, attacker);
+							attacker.RegisterHit(attack.InstanceId, blocked);
 							TriggerHitPause(hitData.HitPauseDuration, hitData.Strength);
-							frontPlayer = attacker;
+							frontPlayerNumber = attacker.PlayerNumber;
 						}
 
 						return;
@@ -340,8 +373,8 @@ public partial class MatchManager : Node
 
 	private void DrawAttackStateIndicator(Player player)
 	{
-		var attack = player.CurrentMove;
-		if (attack == null) return;
+		ActiveMoveState attack = player.CurrentMove;
+		if (!attack.HasMove) return;
 
 		int startupEnd = attack.Data.Startup;
 		int activeEnd  = startupEnd + attack.Data.Active;

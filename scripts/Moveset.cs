@@ -3,6 +3,19 @@ using System.Numerics;
 
 public static class Moveset
 {
+    // Registers every move with MoveData.Register so each gets a stable Id. Ids are the
+    // argument order below — adding new moves at the end is safe; reordering existing entries
+    // would change ids and desync any in-flight ActiveMoveState. Runs once at type init.
+    static Moveset()
+    {
+        MoveData.Register(
+            StandingLight, CrouchingLight, AirLight,
+            StandingMedium, CrouchingMedium, AirMedium,
+            StandingHeavy, CrouchingHeavy, AirHeavy,
+            FowardGrab, BackGrab
+        );
+    }
+
     public static readonly AttackData StandingLight = new AttackData
     {
         AnimationName = "StandLight",

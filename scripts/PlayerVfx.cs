@@ -72,11 +72,11 @@ public partial class PlayerVfx : Node3D
         string desiredPath = "";
         float alpha = 0f;
 
-        if (player.IsAttacking() && player.CurrentMove is ActiveMove move
-            && move.Data is MoveData data && data.Vfx.HasScene)
+        if (player.IsAttacking() && player.CurrentMove.HasMove
+            && player.CurrentMove.Data is MoveData data && data.Vfx.HasScene)
         {
             // The first active frame is Startup + 1 (see Player move-frame logic); count from there.
-            int framesSinceSpawn = move.Frame - (data.Startup + 1);
+            int framesSinceSpawn = player.CurrentMove.Frame - (data.Startup + 1);
             desiredPath = data.Vfx.ScenePath;
             alpha = data.Vfx.AlphaAt(framesSinceSpawn);
         }

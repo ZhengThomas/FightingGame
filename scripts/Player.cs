@@ -59,63 +59,6 @@ public static class PlayerConstants
     public static float ToWorld(int sim) => sim / (float)PhysicsScale;
 }
 
-public class ActiveMove
-{
-    public readonly MoveData Data;
-    public readonly int Id;
-    public int Frame;
-    public bool HitLanded;
-    public bool Blocked;
-
-    private List<Box> lastValidHitboxes = null;
-    private List<Box> lastValidHurtboxes = null;
-    static readonly List<Box> emptyList = new List<Box>();
-
-    public ActiveMove(MoveData data, int id)
-    {
-        Data = data;
-        Id = id;
-        // Start at 1 so the press tick counts as startup frame 1 (Frame is not incremented
-        // that same tick — ProcessCurrentState already ran before StartMove).
-        Frame = 1;
-    }
-
-    public List<Box> GetCurrentHitboxes()
-    {
-        int startupEnd = Data.Startup;
-        int activeEnd  = startupEnd + Data.Active;
-
-        if (Frame > startupEnd && Frame <= activeEnd)
-        {
-            int activeFrame = Frame - startupEnd - 1;
-            var perFrame = Data.HitboxesPerFrame;
-            List<Box> boxes = null;
-            if (perFrame != null && activeFrame < perFrame.Length)
-                boxes = perFrame[activeFrame];
-            if (boxes != null)
-                lastValidHitboxes = boxes;
-            return lastValidHitboxes ?? emptyList;
-        }
-
-        return emptyList;
-    }
-
-    // Returns the per-frame hurtbox override for the current frame, or null if none.
-    // Player.GetCurrentHurtboxes() falls back to the default pose hurtbox when this is null.
-    // Frame is 1-based (press tick = 1); the array is 0-based over the move's lifetime.
-    public List<Box> GetHurtboxOverride()
-    {
-        var perFrame = Data.HurtboxesPerFrame;
-        if (perFrame == null) return null;
-        List<Box> boxes = null;
-        int index = Frame - 1;
-        if (index >= 0 && index < perFrame.Length)
-            boxes = perFrame[index];
-        if (boxes != null)
-            lastValidHurtboxes = boxes;
-        return lastValidHurtboxes;
-    }
-}
 public enum PlayerState
 {
     Idle,
@@ -223,10 +166,15 @@ public partial class Player : Node3D
     public int SimY;
     PlayerState currentState = PlayerState.Idle;
     JumpState jump = new JumpState { JumpSquatFrame = -1, AirdashFrame = -1, LandingFrame = -1 };
-    ActiveMove currentMove = null;
+    ActiveMoveState currentMove = ActiveMoveState.None;
+    // Runtime caches for the current move's per-frame hitbox/hurtbox lists. Rebuildable from
+    // currentMove + MoveData, so these are NOT part of the snapshot state — they're just used
+    // to hold the last-non-null list across active-frame gaps within a single move.
+    List<Box> lastValidHitboxes;
+    List<Box> lastValidHurtboxes;
 
     public PlayerState CurrentState => currentState;
-    public ActiveMove CurrentMove => currentMove;
+    public ActiveMoveState CurrentMove => currentMove;
     public PhysicsState Physics => physics;
     public int AirDashDirection => jump.AirDashDirection; // +1/-1, the locked-in airdash direction
     // Bumped every hit/block so the animator can replay reaction clips on re-hit in the same state.
@@ -238,7 +186,9 @@ public partial class Player : Node3D
     HitReactionState hitReaction;
     BlockReactionState blockReaction;
     GrabSequenceState grabSequence;
-    Player grabPartner = null; // the other player during GrabHit / HitByGrab
+    // The other player during GrabHit / HitByGrab. Stored as player number
+    int grabPartnerNumber = 0;
+    Player GrabPartner => Match?.PlayerFromNumber(grabPartnerNumber);
     MatchManager Match;
     public bool SuppressGravity = false;
     int reactionFlashId;
@@ -249,8 +199,9 @@ public partial class Player : Node3D
     static readonly List<Box> CrouchingHurtbox = new List<Box>{new Box { X = 0, Y = 5000, Width = 5000, Height = 7500 }};
     static readonly List<Box> AirborneHurtbox = new List<Box>{new Box { X = 0, Y = 10000, Width = 5000, Height = 10000 }};
 
-    // stores 10 most recently received hit ids
-    int[] hitHistory = new int[10];
+    // stores 10 most recently received hit ids. Inline value-type ring so a snapshot's struct
+    // copy captures every slot (a plain int[] would share the array reference across snapshots).
+    HitHistoryBuffer hitHistory;
     int hitHistoryIndex = 0;
     FacingDirection lastFacing;
     int currentBufferWindow = PlayerConstants.BufferWindow; // depends on if were cancelling or not, our current state
@@ -357,9 +308,66 @@ public partial class Player : Node3D
         };
     }
 
+    // Pack every sim-critical field on this Player into a PlayerSnapshot for rollback storage.
+    // Any field that affects future ticks belongs here; runtime caches (lastValidHitboxes,
+    // moveList, cachedStats) do NOT — they're derived and rebuild on demand.
+    public PlayerSnapshot CaptureSnapshot() => new PlayerSnapshot
+    {
+        SimX = SimX,
+        SimY = SimY,
+        Physics = physics,
+        CurrentState = currentState,
+        Jump = jump,
+        CurrentMove = currentMove,
+        BackdashInfo = backdashInfo,
+        DashCooldown = dashCooldown,
+        GroundDashFrame = groundDashFrame,
+        HitReaction = hitReaction,
+        BlockReaction = blockReaction,
+        GrabSequence = grabSequence,
+        GrabPartnerNumber = grabPartnerNumber,
+        SuppressGravity = SuppressGravity,
+        ReactionFlashId = reactionFlashId,
+        HitHistory = hitHistory,
+        HitHistoryIndex = hitHistoryIndex,
+        LastFacing = lastFacing,
+        CurrentBufferWindow = currentBufferWindow,
+        Marks = Marks,
+    };
+
+    // Overwrite every sim-critical field on this Player from a PlayerSnapshot. Also blanks the
+    // rebuildable caches so a stale list from before the restore point can't leak into the
+    // first GetCurrentHitboxes / GetCurrentHurtboxes call after restore.
+    public void RestoreSnapshot(PlayerSnapshot s)
+    {
+        SimX = s.SimX;
+        SimY = s.SimY;
+        physics = s.Physics;
+        currentState = s.CurrentState;
+        jump = s.Jump;
+        currentMove = s.CurrentMove;
+        backdashInfo = s.BackdashInfo;
+        dashCooldown = s.DashCooldown;
+        groundDashFrame = s.GroundDashFrame;
+        hitReaction = s.HitReaction;
+        blockReaction = s.BlockReaction;
+        grabSequence = s.GrabSequence;
+        grabPartnerNumber = s.GrabPartnerNumber;
+        SuppressGravity = s.SuppressGravity;
+        reactionFlashId = s.ReactionFlashId;
+        hitHistory = s.HitHistory;
+        hitHistoryIndex = s.HitHistoryIndex;
+        lastFacing = s.LastFacing;
+        currentBufferWindow = s.CurrentBufferWindow;
+        Marks = s.Marks;
+        lastValidHitboxes = null;
+        lastValidHurtboxes = null;
+        SyncVisualPosition();
+    }
+
     public void RegisterHit(int attackId, bool blocked = false)
     {
-        if (currentMove != null && currentMove.Id == attackId)
+        if (currentMove.HasMove && currentMove.InstanceId == attackId)
         {
             currentMove.HitLanded = true;
             currentMove.Blocked = blocked;
@@ -368,8 +376,8 @@ public partial class Player : Node3D
 
     public bool WasAlreadyHitBy(int attackId)
     {
-        foreach (var record in hitHistory)
-            if (record == attackId)
+        for (int i = 0; i < HitHistoryBuffer.Size; i++)
+            if (hitHistory[i] == attackId)
                 return true;
         return false;
     }
@@ -377,7 +385,7 @@ public partial class Player : Node3D
     public virtual bool TakeHit(AttackData data, int attackId, int direction, Player attacker)
     {
         hitHistory[hitHistoryIndex] = attackId;
-        hitHistoryIndex = (hitHistoryIndex + 1) % hitHistory.Length;
+        hitHistoryIndex = (hitHistoryIndex + 1) % HitHistoryBuffer.Size;
 
         // Before we actually get hurt, instead first check if we block the hit.
         if (CanBlock(currentState) && IsHoldingBackForBlock(attacker) && IsHoldingHighLowForBlock(data))
@@ -476,12 +484,18 @@ public partial class Player : Node3D
         // ID is derived from frame count and player number, like hashing but lazy
         // could overflow if 2 billion frames pass, which is unlikely and i will ignore such a possibility
         int id = PlayerNumber * 1000000 + Match.FrameCount;
-        currentMove = new ActiveMove(moveData, id);
+        // Frame starts at 1 so the press tick counts as startup frame 1 (Frame is not incremented
+        // that same tick — ProcessCurrentState already ran before StartMove).
+        currentMove = new ActiveMoveState { MoveDataId = moveData.Id, InstanceId = id, Frame = 1 };
+        // Reset the per-move hitbox/hurtbox last-valid caches so leftovers from the previous
+        // move can't leak into the new move's first hitbox lookup.
+        lastValidHitboxes = null;
+        lastValidHurtboxes = null;
     }
 
-    public IEnumerable<ActiveMove> GetActiveMoves()
+    public IEnumerable<ActiveMoveState> GetActiveMoves()
     {
-        if (currentMove != null)
+        if (currentMove.HasMove)
             yield return currentMove;
         // future: yield return each spawned projectile/attack here
     }
@@ -574,7 +588,7 @@ public partial class Player : Node3D
     // Sets this player up as the attacker for the grab cinematic.
     public void RegisterGrab(Player defender, GrabData grabData)
     {
-        grabPartner = defender;
+        grabPartnerNumber = defender.PlayerNumber;
         grabSequence.Timer.Duration = grabData.GrabSequenceDuration;
 
         if (grabData.IsBackThrow)
@@ -604,9 +618,9 @@ public partial class Player : Node3D
     public void GetGrabbed(GrabData grabData, int attackId, Player attacker)
     {
         hitHistory[hitHistoryIndex] = attackId;
-        hitHistoryIndex = (hitHistoryIndex + 1) % hitHistory.Length;
+        hitHistoryIndex = (hitHistoryIndex + 1) % HitHistoryBuffer.Size;
 
-        grabPartner = attacker;
+        grabPartnerNumber = attacker.PlayerNumber;
         grabSequence.Timer.Duration = grabData.GrabSequenceDuration;
 
         // Starter grab: reset combo scaling. Combo grabs (grabbed while already hurt) preserve
@@ -687,8 +701,45 @@ public partial class Player : Node3D
     static readonly List<Box> emptyBoxList = new List<Box>();
     public List<Box> GetCurrentHitboxes()
     {
-        return currentMove?.GetCurrentHitboxes() ?? emptyBoxList;
+        if (!currentMove.HasMove) return emptyBoxList;
+        MoveData data = currentMove.Data;
+        if (data == null) return emptyBoxList;
+
+        int startupEnd = data.Startup;
+        int activeEnd  = startupEnd + data.Active;
+
+        if (currentMove.Frame > startupEnd && currentMove.Frame <= activeEnd)
+        {
+            int activeFrame = currentMove.Frame - startupEnd - 1;
+            var perFrame = data.HitboxesPerFrame;
+            List<Box> boxes = null;
+            if (perFrame != null && activeFrame < perFrame.Length)
+                boxes = perFrame[activeFrame];
+            if (boxes != null)
+                lastValidHitboxes = boxes;
+            return lastValidHitboxes ?? emptyBoxList;
+        }
+        return emptyBoxList;
     }
+
+    // Per-frame hurtbox override for the current move's current frame, or null if none.
+    // Frame is 1-based (press tick = 1); the array is 0-based over the move's lifetime.
+    List<Box> GetCurrentHurtboxOverride()
+    {
+        if (!currentMove.HasMove) return null;
+        MoveData data = currentMove.Data;
+        var perFrame = data?.HurtboxesPerFrame;
+        if (perFrame == null) return null;
+
+        List<Box> boxes = null;
+        int index = currentMove.Frame - 1;
+        if (index >= 0 && index < perFrame.Length)
+            boxes = perFrame[index];
+        if (boxes != null)
+            lastValidHurtboxes = boxes;
+        return lastValidHurtboxes;
+    }
+
     public virtual List<Box> GetCurrentHurtboxes()
     {
         // Invulnerable while knocked down / waking up
@@ -704,8 +755,8 @@ public partial class Player : Node3D
             return emptyBoxList;
         }
         // If were attacking, its based on our attack
-        if (IsAttacking() && currentMove != null)
-            return currentMove.GetHurtboxOverride() ?? GetDefaultHurtbox();
+        if (IsAttacking() && currentMove.HasMove)
+            return GetCurrentHurtboxOverride() ?? GetDefaultHurtbox();
         // Otherwise, its based on our current state, crouching/idle/jumping/etc.
         return GetDefaultHurtbox();
     }
@@ -883,6 +934,12 @@ public partial class Player : Node3D
 
     protected virtual void ProcessCurrentState()
     {
+        // Advance the active move's frame counter once per tick, before dispatching to the
+        // state handler. Doing it here (instead of in each attack handler) means a new attack
+        // state can be added without remembering to bump the counter.
+        if (currentMove.HasMove)
+            currentMove.Frame++;
+
         switch (currentState)
         {
             case PlayerState.Idle:
@@ -980,47 +1037,27 @@ public partial class Player : Node3D
     protected virtual void HandleGrabOccurringState()
     {
         Decelerate();
-        currentMove.Frame++;
-
-        int startupEnd  = currentMove.Data.Startup;
-        int activeEnd   = startupEnd + currentMove.Data.Active;
-        int recoveryEnd = activeEnd  + currentMove.Data.Recovery;
-
-        if (currentMove.Frame <= startupEnd)
-        {
-            // startup — not yet active
-        }
-        else if (currentMove.Frame <= activeEnd)
-        {
-            // active — grab hitbox is out
-        }
-        else if (currentMove.Frame <= recoveryEnd)
-        {
-            // recovery — grab whiffed
-        }
-        else
-        {
-            TransitionTo(PlayerState.Idle);
-        }
+        if (MoveIsOver()) TransitionTo(PlayerState.Idle);
     }
 
     protected virtual void HandleGrabHitState()
     {
         grabSequence.Timer.Frame++;
         Decelerate();
+        Player partner = GrabPartner;
         if (grabSequence.Timer.Frame < 20)
         {
-            grabPartner.Decelerate();
+            partner?.Decelerate();
         }
 
-        // Drive the grab here using grabPartner.SetVelocity / AddVelocity / SnapToPosition.
-        if (grabSequence.Timer.Frame == 20)
+        // Drive the grab here using partner.SetVelocity / AddVelocity / SnapToSim.
+        if (grabSequence.Timer.Frame == 20 && partner != null)
         {
-            grabPartner.SetVelocity(500 * (int)GetFacing(), 1500); // 0.05 / 0.15 world → physics units
-            grabPartner.hitReaction.Timer.Duration = 100; // They get "hit" by the grab and are sent flying ish
+            partner.SetVelocity(500 * (int)GetFacing(), 1500); // 0.05 / 0.15 world → physics units
+            partner.hitReaction.Timer.Duration = 100; // They get "hit" by the grab and are sent flying ish
             // HardKnockdown was already set from GrabData in GetGrabbed.
             // this will be custom for each character, but rn im lazy and this is simple and sounds right
-            grabPartner.TransitionTo(PlayerState.AirHitstun);
+            partner.TransitionTo(PlayerState.AirHitstun);
         }
 
         if (grabSequence.Timer.Done) {
@@ -1044,7 +1081,7 @@ public partial class Player : Node3D
     public bool CanCancelInto(MoveType move)
     {
         if (!IsAttacking()) return true;
-        if (currentMove == null || !currentMove.HitLanded) return false;
+        if (!currentMove.HasMove || !currentMove.HitLanded) return false;
         if (currentMove.Data is not AttackData attackData) return false;
         if (attackData.CancellableInto == null) return false;
 
@@ -1054,138 +1091,91 @@ public partial class Player : Node3D
         return false;
     }
 
+    // True if the current move has run past its full Startup+Active+Recovery length. 
+    protected bool MoveIsOver()
+    {
+        if (!currentMove.HasMove) return true;
+        MoveData data = currentMove.Data;
+        if (data == null) return true;
+        return currentMove.Frame > data.Startup + data.Active + data.Recovery;
+    }
+
+    // Shared "the hit landed, is anything trying to cancel out of this move?" check for the
+    // three attacking handlers. Returns true if a cancel was executed and the caller should stop
+    // processing the current tick (the state was transitioned as part of the cancel). Returns
+    // false otherwise (no input matched, or the cancel wasn't legal).
+    protected bool TryHitCancel()
+    {
+        if (!currentMove.HitLanded) return false;
+
+        // Move-chain cancel: any move in the movelist whose Condition matches (and CanCancelInto
+        // allows) wins first. This is how light → medium → heavy chains happen mid-attack.
+        Move chained = CheckMoveList();
+        if (chained != null) { chained.Execute(); return true; }
+
+        // Jump cancel: works on ground attacks always, air attacks only if a double jump remains.
+        // Air double-jump cancels also consume HasDoubleJump and re-orient facing on the way out.
+        bool jumpPressed = Inputs.WasJustPressed(PlayerConstants.BufferWindow, Button.Jump) != null;
+        bool inAir = IsAirborneState(currentState);
+        if (CanCancelInto(MoveType.Jump) && jumpPressed && (!inAir || jump.HasDoubleJump))
+        {
+            JumpType jumpType = currentMove.Blocked ? JumpType.Normal : JumpType.Combo;
+            Jump(inAir ? Stats.DoubleJumpForce : Stats.JumpForce, jumpType);
+            if (inAir)
+            {
+                jump.HasDoubleJump = false;
+                updateFacing(true);
+            }
+            TransitionTo(PlayerState.Jumping);
+            return true;
+        }
+
+        // Air-dash cancel: only air attacks, requires HasAirdash and a dash input this frame.
+        if (inAir && CanCancelInto(MoveType.Dash) && jump.HasAirdash
+            && (ForwardDashInputted() || BackDashInputted()))
+        {
+            jump.AirDashDirection = ForwardDashInputted()
+                ? (GetFacing() == FacingDirection.Right ? 1 : -1)
+                : (GetFacing() == FacingDirection.Right ? -1 : 1);
+            jump.HasAirdash = false;
+            jump.AirdashFrame = 0;
+            jump.CurrentJumpType = currentMove.Blocked ? JumpType.Normal : JumpType.Combo;
+            TransitionTo(PlayerState.Airdashing);
+            return true;
+        }
+
+        return false;
+    }
+
+    // The one clean-up hook run when a move ends 
+    protected void EndCurrentMove()
+    {
+        currentMove = ActiveMoveState.None;
+        lastValidHitboxes = null;
+        lastValidHurtboxes = null;
+    }
+
     protected virtual void HandleStandAttackingState()
     {
         Decelerate();
-        currentMove.Frame++;
-
-        int startupEnd  = currentMove.Data.Startup;
-        int activeEnd   = startupEnd + currentMove.Data.Active;
-        int recoveryEnd = activeEnd  + currentMove.Data.Recovery;
-
-        if (currentMove.HitLanded)
-        {
-            Move cancel = CheckMoveList();
-            if (cancel != null) { cancel.Execute(); return; }
-
-            // We also wanna check if we can cancel into some other stuff, like jumping
-            else if(CanCancelInto(MoveType.Jump) && Inputs.WasJustPressed(PlayerConstants.BufferWindow, Button.Jump) != null)
-            {
-                JumpType jumpType = currentMove.Blocked ? JumpType.Normal : JumpType.Combo;
-                Jump(Stats.JumpForce, jumpType);
-                TransitionTo(PlayerState.Jumping);
-                return;
-            }
-        }
-        if (currentMove.Frame <= startupEnd)
-        {
-            // startup — not yet active, apply startup velocity
-        }
-        else if (currentMove.Frame <= activeEnd)
-        {
-            // active — hitbox is out
-        }
-        else if (currentMove.Frame <= recoveryEnd)
-        {
-            // recovery — attack is done, waiting to act again
-        }
-        else
-        {
+        if (TryHitCancel()) return;
+        if (MoveIsOver())
             TransitionTo(physics.IsOnFloor ? PlayerState.Idle : PlayerState.Jumping);
-        }
     }
+
     protected virtual void HandleCrouchAttackingState()
     {
         Decelerate();
-        currentMove.Frame++;
-
-        int startupEnd  = currentMove.Data.Startup;
-        int activeEnd   = startupEnd + currentMove.Data.Active;
-        int recoveryEnd = activeEnd  + currentMove.Data.Recovery;
-
-        if (currentMove.HitLanded)
-        {
-            Move cancel = CheckMoveList();
-            if (cancel != null) { cancel.Execute(); return; }
-            
-            // We also wanna check if we can cancel into some other stuff, like jumping
-            else if(CanCancelInto(MoveType.Jump) && Inputs.WasJustPressed(PlayerConstants.BufferWindow, Button.Jump) != null)
-            {
-                // Combo jumps are done by just jumping, no jumpsquat
-                JumpType jumpType = currentMove.Blocked ? JumpType.Normal : JumpType.Combo;
-                Jump(Stats.JumpForce, jumpType);
-                TransitionTo(PlayerState.Jumping);
-                return;
-            }
-        }
-        if (currentMove.Frame <= startupEnd)
-        {
-            // startup — not yet active, apply startup velocity
-        }
-        else if (currentMove.Frame <= activeEnd)
-        {
-            // active — hitbox is out
-        }
-        else if (currentMove.Frame <= recoveryEnd)
-        {
-            // recovery — attack is done, waiting to act again
-        }
-        else
-        {
+        if (TryHitCancel()) return;
+        if (MoveIsOver())
             TransitionTo(PlayerState.Crouching);
-        }
     }
+
     protected virtual void HandleAirAttackingState()
     {
-        currentMove.Frame++;
-
-        int startupEnd  = currentMove.Data.Startup;
-        int activeEnd   = startupEnd + currentMove.Data.Active;
-        int recoveryEnd = activeEnd  + currentMove.Data.Recovery;
-
-        if (currentMove.HitLanded)
-        {
-            Move cancel = CheckMoveList();
-            if (cancel != null) { cancel.Execute(); return; }
-
-            // We also wanna check if we can cancel into some other stuff, like jumping
-            else if (CanCancelInto(MoveType.Jump) && Inputs.WasJustPressed(PlayerConstants.BufferWindow, Button.Jump) != null && jump.HasDoubleJump)
-            {
-                JumpType jumpType = currentMove.Blocked ? JumpType.Normal : JumpType.Combo;
-                Jump(Stats.DoubleJumpForce, jumpType);
-                jump.HasDoubleJump = false;
-                updateFacing(true); 
-                TransitionTo(PlayerState.Jumping);
-                return;
-            }
-            else if (CanCancelInto(MoveType.Dash) && (ForwardDashInputted() || BackDashInputted()) && jump.HasAirdash)
-            {
-                jump.AirDashDirection = ForwardDashInputted()
-                    ? (GetFacing() == FacingDirection.Right ? 1 : -1)
-                    : (GetFacing() == FacingDirection.Right ? -1 : 1);
-                jump.HasAirdash = false;
-                jump.AirdashFrame = 0;
-                jump.CurrentJumpType = currentMove.Blocked ? JumpType.Normal : JumpType.Combo;
-                TransitionTo(PlayerState.Airdashing);
-                return;
-            }
-        }
-        if (currentMove.Frame <= startupEnd)
-        {
-            // startup — not yet active, apply startup velocity
-        }
-        else if (currentMove.Frame <= activeEnd)
-        {
-            // active — hitbox is out
-        }
-        else if (currentMove.Frame <= recoveryEnd)
-        {
-            // recovery — attack is done, waiting to act again
-        }
-        else
-        {
+        if (TryHitCancel()) return;
+        if (MoveIsOver())
             TransitionTo(physics.IsOnFloor ? PlayerState.Idle : PlayerState.Jumping);
-        }
     }
     protected virtual void HandleHitstunState()
     {
@@ -1459,17 +1449,13 @@ public partial class Player : Node3D
         }
         if (currentState == PlayerState.Airdashing)
             jump.AirdashFrame = -1;
-        if (IsAttacking()){
-            currentBufferWindow = PlayerConstants.BufferWindow;
-            currentMove = null;
-        }
-        if (currentState == PlayerState.GrabOccurring)
+        if (IsAttacking() || currentState == PlayerState.GrabOccurring)
         {
             currentBufferWindow = PlayerConstants.BufferWindow;
-            currentMove = null;
+            EndCurrentMove();
         }
         if (currentState == PlayerState.GrabHit || currentState == PlayerState.HitByGrab)
-            grabPartner = null;
+            grabPartnerNumber = 0;
 
         // reset state-specific that we are moving into
         if (newState == PlayerState.JumpSquat)

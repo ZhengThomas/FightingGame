@@ -28,6 +28,23 @@ public struct VfxCue
 // shared by every move type.
 public class MoveData
 {
+    // Stable numeric identity for this move, assigned once at startup by MoveData.Register.
+    public int Id { get; internal set; } = -1;
+
+    static MoveData[] byId;
+
+    // Called once during static init from Moveset. Assigns each move a stable id equal to its
+    // position in the argument list, then remembers the array for LookupById.
+    public static void Register(params MoveData[] moves)
+    {
+        byId = moves;
+        for (int i = 0; i < moves.Length; i++)
+            moves[i].Id = i;
+    }
+
+    public static MoveData LookupById(int id)
+        => (byId != null && id >= 0 && id < byId.Length) ? byId[id] : null;
+
     // Name of the AnimationPlayer clip this move plays.
     public string AnimationName = "";
 

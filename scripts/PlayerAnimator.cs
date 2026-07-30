@@ -338,7 +338,7 @@ public partial class PlayerAnimator : Node3D
     protected virtual void UpdateAnimation(int ticksElapsed)
     {
         PlayerState state = player.CurrentState;
-        int moveId = player.IsAttacking() ? (player.CurrentMove?.Id ?? -1) : -1;
+        int moveId = player.IsAttacking() && player.CurrentMove.HasMove ? player.CurrentMove.InstanceId : -1;
         bool newMove = moveId != -1 && moveId != lastMoveId;
         bool newReaction = player.ReactionFlashId != lastReactionFlashId && IsReactionState(state);
         bool startedClip = false;
@@ -434,7 +434,7 @@ public partial class PlayerAnimator : Node3D
         // drive any of its moves' animations. Falls through to the state defaults if no clip is set.
         if (player.IsAttacking())
         {
-            string moveAnim = player.CurrentMove?.Data?.AnimationName;
+            string moveAnim = player.CurrentMove.Data?.AnimationName;
             if (!string.IsNullOrEmpty(moveAnim))
                 return moveAnim;
         }
