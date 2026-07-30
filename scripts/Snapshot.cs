@@ -26,6 +26,31 @@ public struct ActiveMoveState
     public static ActiveMoveState None => new ActiveMoveState { MoveDataId = -1 };
 }
 
+// One live hitbox spawned by a move. 
+public struct HitboxInstance
+{
+    public int HitboxDataId;   // -1 = inactive slot
+    public int InstanceId;     // unique per spawn; defender's hitHistory keys off this
+    public int Frame;          // 0-based ticks since spawn; expires when Frame >= Data.ActiveDuration
+    public bool HitLanded;     // set true when a hit lands (drives combo scaling / cancel eligibility)
+    public bool Blocked;       // set true when the landed hit was blocked
+    public int FacingAtSpawn;  // +1 (right) / -1 (left) — locked at spawn so the hitbox stays on the same side even if the owner turns around
+
+    public readonly bool IsActive => HitboxDataId >= 0;
+    public readonly HitboxData Data => HitboxData.LookupById(HitboxDataId);
+
+    public static HitboxInstance None => new HitboxInstance { HitboxDataId = -1 };
+}
+
+// Fixed 8-slot pool of live hitboxes per player, stored inline so the PlayerSnapshot struct
+// copies every live hitbox by value.
+[System.Runtime.CompilerServices.InlineArray(Size)]
+public struct HitboxSlots
+{
+    public const int Size = 8;
+    private HitboxInstance _element0;
+}
+
 // Match-global sim state — the state that lives on MatchManager.
 public struct MatchSnapshot
 {
@@ -38,9 +63,8 @@ public struct MatchSnapshot
 }
 
 // Per-player sim state — every field on Player that affects the simulation's forward evolution
-// and therefore has to be restored to re-run past ticks deterministically. Runtime-only caches
-// (lastValidHitboxes / lastValidHurtboxes, cachedStats, moveList) are deliberately absent —
-// they're derived from other state and rebuild themselves on demand.
+// and therefore has to be restored to re-run past ticks deterministically. Cached / derived-
+// only state (cachedStats, moveList) is deliberately absent — it's rebuildable or immutable.
 public struct PlayerSnapshot
 {
     public int SimX;
@@ -63,6 +87,7 @@ public struct PlayerSnapshot
     public FacingDirection LastFacing;
     public int CurrentBufferWindow;
     public ConsumedMarks Marks;
+    public HitboxSlots Hitboxes;
 }
 
 // Whole-match snapshot for one tick — the unit that lives in MatchManager's rolling history

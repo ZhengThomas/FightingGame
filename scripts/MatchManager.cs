@@ -318,56 +318,72 @@ public partial class MatchManager : Node
 		CheckHit(Player2, Player1);
 	}
 
+	// One hit-check per attacker per tick. Iterates every live hitbox on the attacker; the
+	// first one that overlaps a defender hurtbox lands. Whether it lands as a strike or a grab
+	// is a property of the hitbox itself 
 	private void CheckHit(Player attacker, Player defender)
 	{
 		List<Box> hurtboxes = defender.GetCurrentHurtboxes();
 		if (hurtboxes.Count == 0) return;
 
-		int facingMult = attacker.GetFacing() == FacingDirection.Right ? 1 : -1;
-
-		foreach (ActiveMoveState attack in attacker.GetActiveMoves())
+		foreach (HitboxInstance hb in attacker.GetActiveHitboxes())
 		{
-			if (defender.WasAlreadyHitBy(attack.InstanceId)) continue;
+			if (defender.WasAlreadyHitBy(hb.InstanceId)) continue;
+			HitboxData hbData = hb.Data;
+			if (hbData == null) continue;
 
-			List<Box> hitboxes = attacker.GetCurrentHitboxes();
-			if (hitboxes.Count == 0) continue;
+			List<Box> boxes = Player.LookBackForBoxes(hbData.BoxesPerFrame, hb.Frame);
+			if (boxes == null) continue;
 
-			foreach (Box hitbox in hitboxes)
+			foreach (Box hitbox in boxes)
 			{
-				BoxExtentsFacing(attacker.SimX, attacker.SimY, hitbox, facingMult, out int hLeft, out int hRight, out int hBottom, out int hTop);
-
+				BoxExtentsFacing(attacker.SimX, attacker.SimY, hitbox, hb.FacingAtSpawn, out int hLeft, out int hRight, out int hBottom, out int hTop);
 				foreach (Box hurtbox in hurtboxes)
 				{
 					BoxExtents(defender.SimX, defender.SimY, hurtbox, out int dLeft, out int dRight, out int dBottom, out int dTop);
-
 					bool hit = hRight > dLeft && hLeft < dRight && hTop > dBottom && hBottom < dTop;
+					if (!hit) continue;
 
-					if (hit)
+					int attackDir = attacker.SimX < defender.SimX ? 1 : -1;
+
+					if (hbData.IsGrab)
 					{
-						GD.Print($"{attacker.PlayerNumber} hit {defender.PlayerNumber}!");
-						int attackDir = attacker.SimX < defender.SimX ? 1 : -1;
-
-						if (attack.Data is GrabData grabData)
+						if (defender.InGrabbableState())
 						{
-							if(defender.InGrabbableState())
-							{
-								defender.GetGrabbed(grabData, attack.InstanceId, attacker);
-								attacker.RegisterGrab(defender, grabData);
-								frontPlayerNumber = attacker.PlayerNumber;
-							}
-						}
-						else if (attack.Data is AttackData hitData)
-						{
-							bool blocked = defender.TakeHit(hitData, attack.InstanceId, attackDir, attacker);
-							attacker.RegisterHit(attack.InstanceId, blocked);
-							TriggerHitPause(hitData.HitPauseDuration, hitData.Strength);
+							GD.Print($"{attacker.PlayerNumber} grabbed {defender.PlayerNumber}!");
+							defender.GetGrabbed(hbData, hb.InstanceId, attacker);
+							attacker.RegisterGrab(defender, hbData);
 							frontPlayerNumber = attacker.PlayerNumber;
 						}
-
-						return;
+						// else: grab whiffed on an ungrabbable defender — no state change, no
+						// hitHistory entry, hitbox stays live and re-checks next tick.
 					}
+					else
+					{
+						GD.Print($"{attacker.PlayerNumber} hit {defender.PlayerNumber}!");
+						bool blocked = defender.TakeHit(hbData, hb.InstanceId, attackDir, attacker);
+						attacker.RegisterHitboxLanded(hb.InstanceId, blocked);
+						TriggerHitPause(hbData.HitPauseDuration, hbData.Strength);
+						frontPlayerNumber = attacker.PlayerNumber;
+					}
+					return;
 				}
 			}
+		}
+	}
+
+	// Draw every currently-active hitbox for `player`.
+	private void DrawPlayerHitboxes(Player player)
+	{
+		foreach (HitboxInstance hb in player.GetActiveHitboxes())
+		{
+			HitboxData data = hb.Data;
+			if (data == null) continue;
+			List<Box> boxes = Player.LookBackForBoxes(data.BoxesPerFrame, hb.Frame);
+			if (boxes == null) continue;
+			Color color = data.IsGrab ? new Color(1, 0.5f, 0) : new Color(1, 0, 0);
+			foreach (Box box in boxes)
+				DebugDraw.DrawWorldBox(player, box, color, hb.FacingAtSpawn);
 		}
 	}
 
@@ -407,8 +423,7 @@ public partial class MatchManager : Node
 			foreach (Box hurtbox in Player1.GetCurrentHurtboxes())
 				DebugDraw.DrawWorldBox(Player1, hurtbox, p1HurtboxColor);
 
-			foreach (Box hitbox in Player1.GetCurrentHitboxes())
-				DebugDraw.DrawWorldBox(Player1, hitbox, new Color(1, 0, 0), Player1.GetFacing() == FacingDirection.Right ? 1f : -1f);
+			DrawPlayerHitboxes(Player1);
 			DrawAttackStateIndicator(Player1);
 		}
 		
@@ -424,8 +439,7 @@ public partial class MatchManager : Node
 			foreach (Box hurtbox in Player2.GetCurrentHurtboxes())
 				DebugDraw.DrawWorldBox(Player2, hurtbox, p2HurtboxColor);
 
-			foreach (Box hitbox in Player2.GetCurrentHitboxes())
-				DebugDraw.DrawWorldBox(Player2, hitbox, new Color(1, 0, 0), Player2.GetFacing() == FacingDirection.Right ? 1f : -1f);
+			DrawPlayerHitboxes(Player2);
 			DrawAttackStateIndicator(Player2);
 		}
 	}

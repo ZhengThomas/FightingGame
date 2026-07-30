@@ -167,11 +167,9 @@ public partial class Player : Node3D
     PlayerState currentState = PlayerState.Idle;
     JumpState jump = new JumpState { JumpSquatFrame = -1, AirdashFrame = -1, LandingFrame = -1 };
     ActiveMoveState currentMove = ActiveMoveState.None;
-    // Runtime caches for the current move's per-frame hitbox/hurtbox lists. Rebuildable from
-    // currentMove + MoveData, so these are NOT part of the snapshot state — they're just used
-    // to hold the last-non-null list across active-frame gaps within a single move.
-    List<Box> lastValidHitboxes;
-    List<Box> lastValidHurtboxes;
+    // Fixed-size pool of live hitboxes this player has spawned. Each slot is either inactive
+    // (HitboxDataId = -1) or a live HitboxInstance with its own Frame counter and ActiveDuration.
+    HitboxSlots hitboxes;
 
     public PlayerState CurrentState => currentState;
     public ActiveMoveState CurrentMove => currentMove;
@@ -333,6 +331,7 @@ public partial class Player : Node3D
         LastFacing = lastFacing,
         CurrentBufferWindow = currentBufferWindow,
         Marks = Marks,
+        Hitboxes = hitboxes,
     };
 
     // Overwrite every sim-critical field on this Player from a PlayerSnapshot. Also blanks the
@@ -360,8 +359,7 @@ public partial class Player : Node3D
         lastFacing = s.LastFacing;
         currentBufferWindow = s.CurrentBufferWindow;
         Marks = s.Marks;
-        lastValidHitboxes = null;
-        lastValidHurtboxes = null;
+        hitboxes = s.Hitboxes;
         SyncVisualPosition();
     }
 
@@ -382,7 +380,7 @@ public partial class Player : Node3D
         return false;
     }
 
-    public virtual bool TakeHit(AttackData data, int attackId, int direction, Player attacker)
+    public virtual bool TakeHit(HitboxData data, int attackId, int direction, Player attacker)
     {
         hitHistory[hitHistoryIndex] = attackId;
         hitHistoryIndex = (hitHistoryIndex + 1) % HitHistoryBuffer.Size;
@@ -405,7 +403,7 @@ public partial class Player : Node3D
         hitReaction.Timer.Duration = ComboScaling.Apply(baseHitstun, hitstunScale);
         // Damage when health exists:
         //   ComboScaling.Apply(data.Damage, ComboScaling.Sample(ComboScaling.DamageScale, hitReaction.DamageScaleIndex))
-        // Last hit wins: only moves tagged CausesHardKnockdown force the long KD on landing.
+        // Last hit wins: only hitboxes tagged CausesHardKnockdown force the long KD on landing.
         hitReaction.HardKnockdown = data.CausesHardKnockdown;
         reactionFlashId++;
 
@@ -429,7 +427,7 @@ public partial class Player : Node3D
         return false;
     }
 
-    public virtual void BlockAttack(AttackData data, int direction)
+    public virtual void BlockAttack(HitboxData data, int direction)
     {
         blockReaction.Timer.Duration = data.BlockStun > 0 ? data.BlockStun : 15;
         reactionFlashId++;
@@ -487,10 +485,6 @@ public partial class Player : Node3D
         // Frame starts at 1 so the press tick counts as startup frame 1 (Frame is not incremented
         // that same tick — ProcessCurrentState already ran before StartMove).
         currentMove = new ActiveMoveState { MoveDataId = moveData.Id, InstanceId = id, Frame = 1 };
-        // Reset the per-move hitbox/hurtbox last-valid caches so leftovers from the previous
-        // move can't leak into the new move's first hitbox lookup.
-        lastValidHitboxes = null;
-        lastValidHurtboxes = null;
     }
 
     public IEnumerable<ActiveMoveState> GetActiveMoves()
@@ -586,19 +580,19 @@ public partial class Player : Node3D
 
     // Called by MatchManager when a grab hitbox connects.
     // Sets this player up as the attacker for the grab cinematic.
-    public void RegisterGrab(Player defender, GrabData grabData)
+    public void RegisterGrab(Player defender, HitboxData grabHb)
     {
         grabPartnerNumber = defender.PlayerNumber;
-        grabSequence.Timer.Duration = grabData.GrabSequenceDuration;
+        grabSequence.Timer.Duration = grabHb.GrabSequenceDuration;
 
-        if (grabData.IsBackThrow)
+        if (grabHb.IsBackThrow)
             FlipFacing();
 
         // Snap the defender to the inital grab position. If the desired snap would put the
         // defender past the wall, clamp them at the wall and shift the attacker by the same amount
         int facingMult = GetFacing() == FacingDirection.Right ? 1 : -1;
-        int desiredDefenderX = SimX + grabData.DefenderSnapOffsetX * facingMult;
-        int desiredDefenderY = SimY + grabData.DefenderSnapOffsetY;
+        int desiredDefenderX = SimX + grabHb.DefenderSnapOffsetX * facingMult;
+        int desiredDefenderY = SimY + grabHb.DefenderSnapOffsetY;
 
         int wall = PlayerConstants.MaxDistanceFromCenter;
         int clampedDefenderX = Math.Clamp(desiredDefenderX, -wall, wall);
@@ -615,19 +609,19 @@ public partial class Player : Node3D
 
     // Called by MatchManager when this player is caught by a grab.
     // Snaps the defender into position and hands control to the attacker.
-    public void GetGrabbed(GrabData grabData, int attackId, Player attacker)
+    public void GetGrabbed(HitboxData grabHb, int attackId, Player attacker)
     {
         hitHistory[hitHistoryIndex] = attackId;
         hitHistoryIndex = (hitHistoryIndex + 1) % HitHistoryBuffer.Size;
 
         grabPartnerNumber = attacker.PlayerNumber;
-        grabSequence.Timer.Duration = grabData.GrabSequenceDuration;
+        grabSequence.Timer.Duration = grabHb.GrabSequenceDuration;
 
         // Starter grab: reset combo scaling. Combo grabs (grabbed while already hurt) preserve
         // the running scaling from prior hits. This mirrors TakeHit's convention.
         if (!IsHurt())
             ResetComboScaling();
-        hitReaction.HardKnockdown = grabData.CausesHardKnockdown;
+        hitReaction.HardKnockdown = grabHb.CausesHardKnockdown;
 
         TransitionTo(PlayerState.HitByGrab);
     }
@@ -684,7 +678,7 @@ public partial class Player : Node3D
     }
 
     // Returns true if the player's current blocking stance covers the attack's type
-    protected virtual bool IsHoldingHighLowForBlock(AttackData data)
+    protected virtual bool IsHoldingHighLowForBlock(HitboxData data)
     {
         if (IsAirborneState(currentState)) return true; // airblocks always work
 
@@ -699,27 +693,95 @@ public partial class Player : Node3D
 
     // cached empty list so we're not allocating a new one every frame
     static readonly List<Box> emptyBoxList = new List<Box>();
-    public List<Box> GetCurrentHitboxes()
+
+    // Walk backward through a per-frame box-list array starting at `index` (clamped into range)
+    // and return the first non-null entry.
+    public static List<Box> LookBackForBoxes(List<Box>[] perFrame, int index)
     {
-        if (!currentMove.HasMove) return emptyBoxList;
-        MoveData data = currentMove.Data;
-        if (data == null) return emptyBoxList;
+        if (perFrame == null || perFrame.Length == 0) return null;
+        int start = System.Math.Min(index, perFrame.Length - 1);
+        for (int i = start; i >= 0; i--)
+            if (perFrame[i] != null) return perFrame[i];
+        return null;
+    }
 
-        int startupEnd = data.Startup;
-        int activeEnd  = startupEnd + data.Active;
-
-        if (currentMove.Frame > startupEnd && currentMove.Frame <= activeEnd)
+    // Insert a hitbox for `data` into the first inactive slot.
+    public int SpawnHitbox(HitboxData data, int facingMult)
+    {
+        if (data == null) return -1;
+        // InstanceId derives from FrameCount + PlayerNumber + slot so it's stable across
+        // rollback resim (same tick → same id) and unique among live hitboxes.
+        int frameCount = Match?.FrameCount ?? 0;
+        for (int i = 0; i < HitboxSlots.Size; i++)
         {
-            int activeFrame = currentMove.Frame - startupEnd - 1;
-            var perFrame = data.HitboxesPerFrame;
-            List<Box> boxes = null;
-            if (perFrame != null && activeFrame < perFrame.Length)
-                boxes = perFrame[activeFrame];
-            if (boxes != null)
-                lastValidHitboxes = boxes;
-            return lastValidHitboxes ?? emptyBoxList;
+            if (!hitboxes[i].IsActive)
+            {
+                int instanceId = PlayerNumber * 10_000_000 + frameCount * 10 + i;
+                hitboxes[i] = new HitboxInstance
+                {
+                    HitboxDataId = data.Id,
+                    InstanceId = instanceId,
+                    Frame = 0,
+                    HitLanded = false,
+                    Blocked = false,
+                    FacingAtSpawn = facingMult,
+                };
+                return instanceId;
+            }
         }
-        return emptyBoxList;
+        return -1; // no free slot
+    }
+
+    void SpawnScheduledHitboxes()
+    {
+        MoveData data = currentMove.Data;
+        if (data == null || data.HitboxSpawns == null) return;
+        int facingMult = GetFacing() == FacingDirection.Right ? 1 : -1;
+        foreach (HitboxSpawn spawn in data.HitboxSpawns)
+        {
+            if (spawn.Frame == currentMove.Frame && spawn.Hitbox != null)
+                SpawnHitbox(spawn.Hitbox, facingMult);
+        }
+    }
+
+    // Advance every active hitbox's Frame by one, then expire any whose Frame has run past its ActiveDuration.
+    void AdvanceHitboxes()
+    {
+        for (int i = 0; i < HitboxSlots.Size; i++)
+        {
+            if (!hitboxes[i].IsActive) continue;
+            hitboxes[i].Frame++;
+            HitboxData data = hitboxes[i].Data;
+            if (data == null || hitboxes[i].Frame >= data.ActiveDuration)
+                hitboxes[i] = HitboxInstance.None;
+        }
+    }
+
+    public IEnumerable<HitboxInstance> GetActiveHitboxes()
+    {
+        for (int i = 0; i < HitboxSlots.Size; i++)
+            if (hitboxes[i].IsActive) yield return hitboxes[i];
+    }
+
+    // Set HitLanded / Blocked on the hitbox with the given instance id
+    public void RegisterHitboxLanded(int instanceId, bool blocked)
+    {
+        for (int i = 0; i < HitboxSlots.Size; i++)
+        {
+            if (hitboxes[i].IsActive && hitboxes[i].InstanceId == instanceId)
+            {
+                hitboxes[i].HitLanded = true;
+                hitboxes[i].Blocked = blocked;
+                // Also flag the move that spawned this hitbox as having landed a hit — this
+                // is what CanCancelInto and the hit-cancel logic key off of.
+                if (currentMove.HasMove)
+                {
+                    currentMove.HitLanded = true;
+                    currentMove.Blocked = blocked;
+                }
+                return;
+            }
+        }
     }
 
     // Per-frame hurtbox override for the current move's current frame, or null if none.
@@ -728,16 +790,8 @@ public partial class Player : Node3D
     {
         if (!currentMove.HasMove) return null;
         MoveData data = currentMove.Data;
-        var perFrame = data?.HurtboxesPerFrame;
-        if (perFrame == null) return null;
-
-        List<Box> boxes = null;
-        int index = currentMove.Frame - 1;
-        if (index >= 0 && index < perFrame.Length)
-            boxes = perFrame[index];
-        if (boxes != null)
-            lastValidHurtboxes = boxes;
-        return lastValidHurtboxes;
+        if (data == null) return null;
+        return LookBackForBoxes(data.HurtboxesPerFrame, currentMove.Frame - 1);
     }
 
     public virtual List<Box> GetCurrentHurtboxes()
@@ -862,6 +916,7 @@ public partial class Player : Node3D
 
     public void Tick()
     {
+        AdvanceHitboxes();
         if (dashCooldown > 0) dashCooldown--;
         updateFacing();
         ApplyGravity();
@@ -938,7 +993,11 @@ public partial class Player : Node3D
         // state handler. Doing it here (instead of in each attack handler) means a new attack
         // state can be added without remembering to bump the counter.
         if (currentMove.HasMove)
+        {
             currentMove.Frame++;
+            // Fire any hitbox spawns scheduled for the frame we just entered. 
+            SpawnScheduledHitboxes();
+        }
 
         switch (currentState)
         {
@@ -1147,12 +1206,10 @@ public partial class Player : Node3D
         return false;
     }
 
-    // The one clean-up hook run when a move ends 
+    // The one clean-up hook run when a move ends.
     protected void EndCurrentMove()
     {
         currentMove = ActiveMoveState.None;
-        lastValidHitboxes = null;
-        lastValidHurtboxes = null;
     }
 
     protected virtual void HandleStandAttackingState()

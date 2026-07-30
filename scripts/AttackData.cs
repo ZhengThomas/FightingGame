@@ -24,7 +24,14 @@ public struct VfxCue
     }
 }
 
-// Base class for all move data. Contains the frame structure and hitbox information
+// Scheduled hitbox spawn point on a move. 
+public struct HitboxSpawn
+{
+    public int Frame;
+    public HitboxData Hitbox;
+}
+
+// Base class for all move data. Contains the frame structure and hitbox-spawn schedule
 // shared by every move type.
 public class MoveData
 {
@@ -52,57 +59,21 @@ public class MoveData
     public int Active;       // frames hitbox is out
     public int Recovery;     // frames after active before the player can act
 
-    public int Damage;
     public MoveType Strength;
-    public int HitPauseDuration;
 
-    // per-frame hitboxes (indexed from the first active frame)
-    public List<Box>[] HitboxesPerFrame;
+    // When during the move to spawn each hitbox 
+    public HitboxSpawn[] HitboxSpawns;
 
     // per-frame hurtbox overrides (0-based over startup+active+recovery); null entry = use default pose
     public List<Box>[] HurtboxesPerFrame;
 
     // slash VFX to fade in/out over this move's frames (default ScenePath = "" = none)
     public VfxCue Vfx;
-
-    // If true, landing from the resulting air hitstun goes to hard Knockdown+Wakeup.
-    // Otherwise (default) they soft-knockdown and stand up quickly. Shared by normals and throws.
-    public bool CausesHardKnockdown;
-
-    // How many steps to advance on each ComboScaling table after this hit connects.
-    public int DamageProrationSteps = 1;
-    public int HitstunProrationSteps = 1;
 }
 
-// Data for a normal (non-grab) attack.
+// Data for a strike move — any move that can be hit-cancelled into other moves. Grabs use
+// the base MoveData directly.
 public class AttackData : MoveData
 {
-    public int HitStun;
-    public int BlockStun;
-    public int Pushback;
-    public int PushbackOnBlock;
-    public int LaunchForce;
-    public int LaunchForceOnBlock;
-
-    public bool IsOverhead;       // must be blocked standing
-    public bool IsLow;            // must be blocked crouching
-    public bool LaunchesOpponent; // sends the opponent airborne on hit
     public List<MoveType> CancellableInto;
-}
-
-// Data for a grab move. Bypasses blocking and hands control of the defender to the attacker.
-// The attacker scripts the grab in HandleGrabHitState using the Player movement API
-// (SetVelocity, AddVelocity, SnapToSim) on their grabPartner.
-public class GrabData : MoveData
-{
-    public int GrabSequenceDuration; // total frames before the attacker returns to Idle
-
-    // Where the defender snaps the moment the grab connects, as an offset from the attacker's
-    // position, in sim units. X is in the attacker's forward direction.
-    public int DefenderSnapOffsetX;
-    public int DefenderSnapOffsetY;
-
-    // If true, the attacker turns around before the defender snaps into position,
-    // placing the defender behind the attacker (a backthrow).
-    public bool IsBackThrow;
 }
