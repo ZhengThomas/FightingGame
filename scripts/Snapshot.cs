@@ -44,7 +44,7 @@ public struct HitboxInstance
 
 // Fixed 8-slot pool of live hitboxes per player, stored inline so the PlayerSnapshot struct
 // copies every live hitbox by value.
-[System.Runtime.CompilerServices.InlineArray(Size)]
+[InlineArray(Size)]
 public struct HitboxSlots
 {
     public const int Size = 8;

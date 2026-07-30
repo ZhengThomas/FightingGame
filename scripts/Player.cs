@@ -307,8 +307,7 @@ public partial class Player : Node3D
     }
 
     // Pack every sim-critical field on this Player into a PlayerSnapshot for rollback storage.
-    // Any field that affects future ticks belongs here; runtime caches (lastValidHitboxes,
-    // moveList, cachedStats) do NOT — they're derived and rebuild on demand.
+    // Rebuildable / immutable state (moveList, cachedStats) is deliberately absent.
     public PlayerSnapshot CaptureSnapshot() => new PlayerSnapshot
     {
         SimX = SimX,
@@ -361,15 +360,6 @@ public partial class Player : Node3D
         Marks = s.Marks;
         hitboxes = s.Hitboxes;
         SyncVisualPosition();
-    }
-
-    public void RegisterHit(int attackId, bool blocked = false)
-    {
-        if (currentMove.HasMove && currentMove.InstanceId == attackId)
-        {
-            currentMove.HitLanded = true;
-            currentMove.Blocked = blocked;
-        }
     }
 
     public bool WasAlreadyHitBy(int attackId)
@@ -487,13 +477,6 @@ public partial class Player : Node3D
         currentMove = new ActiveMoveState { MoveDataId = moveData.Id, InstanceId = id, Frame = 1 };
     }
 
-    public IEnumerable<ActiveMoveState> GetActiveMoves()
-    {
-        if (currentMove.HasMove)
-            yield return currentMove;
-        // future: yield return each spawned projectile/attack here
-    }
-
     public bool IsAttacking()
     {
         return currentState == PlayerState.AirAttacking || currentState == PlayerState.StandAttacking || currentState == PlayerState.CrouchAttacking;
@@ -532,22 +515,12 @@ public partial class Player : Node3D
         physics.PushbackVelocityX = 0;
     }
 
-    public bool IsGrabbing()
-    {
-        return currentState == PlayerState.GrabOccurring;
-    }
-
     public bool CanUseGrab()
     {
         return currentState == PlayerState.Idle
             || currentState == PlayerState.Walking
             || currentState == PlayerState.Crouching
             || currentState == PlayerState.GroundDashing;
-    }
-
-    public bool IsInGrabSequence()
-    {
-        return currentState == PlayerState.GrabHit || currentState == PlayerState.HitByGrab;
     }
 
     // Movement API used by the attacker to drive the defender during a grab sequence.
@@ -705,7 +678,8 @@ public partial class Player : Node3D
         return null;
     }
 
-    // Insert a hitbox for `data` into the first inactive slot.
+    // Insert a hitbox for `data` into the first inactive slot. Returns the assigned InstanceId,
+    // or -1 if all slots are occupied (warning printed so silent drops don't hide themselves).
     public int SpawnHitbox(HitboxData data, int facingMult)
     {
         if (data == null) return -1;
@@ -729,7 +703,8 @@ public partial class Player : Node3D
                 return instanceId;
             }
         }
-        return -1; // no free slot
+        GD.PushWarning($"Player {PlayerNumber} could not spawn hitbox (id {data.Id}) — all {HitboxSlots.Size} slots occupied.");
+        return -1;
     }
 
     void SpawnScheduledHitboxes()
@@ -763,7 +738,7 @@ public partial class Player : Node3D
             if (hitboxes[i].IsActive) yield return hitboxes[i];
     }
 
-    // Set HitLanded / Blocked on the hitbox with the given instance id
+    // Mark the hitbox with the given InstanceId as having landed. Only touches the hitbox slot.
     public void RegisterHitboxLanded(int instanceId, bool blocked)
     {
         for (int i = 0; i < HitboxSlots.Size; i++)
@@ -772,16 +747,17 @@ public partial class Player : Node3D
             {
                 hitboxes[i].HitLanded = true;
                 hitboxes[i].Blocked = blocked;
-                // Also flag the move that spawned this hitbox as having landed a hit — this
-                // is what CanCancelInto and the hit-cancel logic key off of.
-                if (currentMove.HasMove)
-                {
-                    currentMove.HitLanded = true;
-                    currentMove.Blocked = blocked;
-                }
                 return;
             }
         }
+    }
+
+    // Mark the current move as having landed a hit. CanCancelInto / TryHitCancel key off of this.
+    public void MarkCurrentMoveLanded(bool blocked)
+    {
+        if (!currentMove.HasMove) return;
+        currentMove.HitLanded = true;
+        currentMove.Blocked = blocked;
     }
 
     // Per-frame hurtbox override for the current move's current frame, or null if none.
@@ -1114,8 +1090,7 @@ public partial class Player : Node3D
         {
             partner.SetVelocity(500 * (int)GetFacing(), 1500); // 0.05 / 0.15 world → physics units
             partner.hitReaction.Timer.Duration = 100; // They get "hit" by the grab and are sent flying ish
-            // HardKnockdown was already set from GrabData in GetGrabbed.
-            // this will be custom for each character, but rn im lazy and this is simple and sounds right
+            // HardKnockdown is already set by GetGrabbed from the grab hitbox.
             partner.TransitionTo(PlayerState.AirHitstun);
         }
 

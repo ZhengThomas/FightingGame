@@ -4,9 +4,8 @@ using System.Collections.Generic;
 // hitstun, pushback, etc. A move (see MoveData) contains a schedule of HitboxSpawns.
 public class HitboxData
 {
-    // Stable numeric identity, assigned by MoveData.Register (or a similar Hitboxes.Register)
-    // so HitboxInstance can hold a lightweight id rather than a class reference and stay a
-    // pure value type that snapshots by copy.
+    // Stable numeric identity assigned by Register. HitboxInstance stores this id instead of
+    // a class reference so it stays a value type that snapshots by copy.
     public int Id { get; internal set; } = -1;
 
     static HitboxData[] byId;
