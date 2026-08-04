@@ -22,6 +22,7 @@ public enum JumpType
     Normal,
     Dash,
     Combo,
+    Airdash,
 }
 public struct JumpState 
 {
@@ -962,6 +963,12 @@ public partial class Player : Node3D
         if (!hurt && jump.CurrentJumpType == JumpType.Combo)
             floating = Stats.ComboFloatingGravity;
 
+        // Post-airdash glide: floatier + slower fall to preserve momentum for a bit.
+        if (!hurt && jump.CurrentJumpType == JumpType.Airdash)
+        {
+            floating = Stats.AirdashFloatingGravity;
+        }
+
         // GravityScale is thousandths (1000 = 1x); multiply then divide keeps the scale integer.
         int grav = hurt ? hitReaction.GravityScale : ComboScaling.ScaleUnit;
 
@@ -1283,6 +1290,7 @@ public partial class Player : Node3D
         if (jump.AirdashFrame > totalAirdashDuration)
         {
             jump.AirdashFrame = -1;
+            jump.CurrentJumpType = JumpType.Airdash;
             TransitionTo(PlayerState.Jumping);
         }
     }

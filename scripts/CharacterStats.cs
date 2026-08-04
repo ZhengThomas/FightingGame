@@ -29,6 +29,7 @@ public record struct CharacterStats
     public int RisingGravity;
     public int FloatingGravity;
     public int ComboFloatingGravity;
+    public int AirdashFloatingGravity;
     public int FallingGravity;
     public int FloatingGravityThreshold;
     public int MaxFallSpeed;
@@ -80,6 +81,7 @@ public record struct CharacterStats
         RisingGravity = 150,
         FloatingGravity = 40,
         ComboFloatingGravity = 10,
+        AirdashFloatingGravity = 20,
         FallingGravity = 200,
         FloatingGravityThreshold = 230,
         MaxFallSpeed = -1830,
@@ -95,10 +97,10 @@ public record struct CharacterStats
         BackDashStartDuration = 3,
         BackDashRecoverDuration = 10,
         BackDashDuration = 7,
-        AirDashSpeed = 2000,
+        AirDashSpeed = 1500,
         AirDashFinishSpeed = 830,
         AirDashStartup = 5,
-        AirDashDuration = 7,
+        AirDashDuration = 4,
         AirDashRecovery = 3,
         DashCooldown = 8,
         MinDashDuration = 12,

@@ -8,6 +8,7 @@
 [ext_resource type="Texture2D" uid="uid://cr26m2snpan8l" path="res://sprites/HealthbarFront.png" id="4_4arys"]
 [ext_resource type="PackedScene" uid="uid://lfpeewpqnrfk" path="res://player.tscn" id="4_jka67"]
 [ext_resource type="Script" uid="uid://d0brfe7tnn8dw" path="res://scripts/DebugDraw.cs" id="4_wc5p8"]
+[ext_resource type="Script" uid="uid://biypgpgpadelt" path="res://scripts/HealthBarHud.cs" id="5_4arys"]
 
 [sub_resource type="Environment" id="Environment_s68cd"]
 
@@ -47,47 +48,78 @@ size = 3.893
 script = ExtResource("1_jka67")
 
 [node name="HealthbarPlayer1Background" type="Sprite3D" parent="Camera3D" unique_id=533547314]
-transform = Transform3D(0.9, 0, 0, 0, 1.1, 0, 0, 0, 1, -2.044, 1.9, -5)
+transform = Transform3D(0.9, 0, 0, 0, 1.1, 0, 0, 0, 1, -4, 1.8, -5)
+centered = false
 pixel_size = 0.0005
 billboard = 1
 fixed_size = true
+render_priority = -1
 texture = ExtResource("2_i5arm")
 
 [node name="HealthbarRed" type="Sprite3D" parent="Camera3D/HealthbarPlayer1Background" unique_id=990763432]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0.001)
+centered = false
+offset = Vector2(10, 4)
 pixel_size = 0.0005
 billboard = 1
 fixed_size = true
+render_priority = -1
 texture = ExtResource("3_jsk3o")
+region_enabled = true
 
 [node name="HealthbarYellow" type="Sprite3D" parent="Camera3D/HealthbarPlayer1Background" unique_id=832721342]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0.002)
+centered = false
+offset = Vector2(10, 4)
 pixel_size = 0.0005
 billboard = 1
 fixed_size = true
 texture = ExtResource("4_4arys")
+region_enabled = true
 
 [node name="HealthbarPlayer2Background" type="Sprite3D" parent="Camera3D" unique_id=1534985581]
-transform = Transform3D(0.9, 0, 0, 0, 1.1, 0, 0, 0, 1, 2, 1.9, -5)
+transform = Transform3D(0.9, 0, 0, 0, 1.1, 0, 0, 0, 1, 4, 1.8, -5)
+centered = false
+offset = Vector2(-1600, 0)
 pixel_size = 0.0005
 billboard = 1
 fixed_size = true
+render_priority = -1
 texture = ExtResource("2_i5arm")
 
 [node name="HealthbarRed" type="Sprite3D" parent="Camera3D/HealthbarPlayer2Background" unique_id=2013896093]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0.001)
+centered = false
+offset = Vector2(-1590, 4)
 pixel_size = 0.0005
 billboard = 1
 fixed_size = true
+render_priority = -1
 texture = ExtResource("3_jsk3o")
+region_enabled = true
 
 [node name="HealthbarYellow" type="Sprite3D" parent="Camera3D/HealthbarPlayer2Background" unique_id=1154613590]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0.002)
+centered = false
+offset = Vector2(-1590, 4)
 flip_h = true
 pixel_size = 0.0005
 billboard = 1
 fixed_size = true
 texture = ExtResource("4_4arys")
+region_enabled = true
+
+[node name="HealthbarHud" type="Node3D" parent="Camera3D" unique_id=633452886 node_paths=PackedStringArray("P1Fill", "P1Trail", "P2Fill", "P2Trail", "P1", "P2", "Match")]
+script = ExtResource("5_4arys")
+P1Fill = NodePath("../HealthbarPlayer1Background/HealthbarYellow")
+P1Trail = NodePath("../HealthbarPlayer1Background/HealthbarRed")
+P2Fill = NodePath("../HealthbarPlayer2Background/HealthbarYellow")
+P2Trail = NodePath("../HealthbarPlayer2Background/HealthbarRed")
+P1 = NodePath("../../MatchManager/Player")
+P2 = NodePath("../../MatchManager/Player2")
+Match = NodePath("../../MatchManager")
+TrailDelayFrames = 50
+TrailFollowPerFrame = 0.015
 
 [node name="WorldEnvironment" type="WorldEnvironment" parent="." unique_id=1620655634]
 environment = SubResource("Environment_s68cd")
