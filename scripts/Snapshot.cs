@@ -88,6 +88,7 @@ public struct PlayerSnapshot
     public int CurrentBufferWindow;
     public ConsumedMarks Marks;
     public HitboxSlots Hitboxes;
+    public int Health;
 }
 
 // Whole-match snapshot for one tick — the unit that lives in MatchManager's rolling history

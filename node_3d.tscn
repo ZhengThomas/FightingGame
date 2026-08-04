@@ -2,7 +2,10 @@
 
 [ext_resource type="Script" uid="uid://c5afarsbnebem" path="res://scripts/CameraController.cs" id="1_jka67"]
 [ext_resource type="Shader" uid="uid://csifhdipq5x7" path="res://defualtGridShader.gdshader" id="1_r3fl7"]
+[ext_resource type="Texture2D" uid="uid://dgg7st3bcbham" path="res://sprites/HealthbarBackground.png" id="2_i5arm"]
 [ext_resource type="Script" uid="uid://fn2tqsh65fm8" path="res://scripts/MatchManager.cs" id="2_jka67"]
+[ext_resource type="Texture2D" uid="uid://c5702db38qe5x" path="res://sprites/HealthbarBack.png" id="3_jsk3o"]
+[ext_resource type="Texture2D" uid="uid://cr26m2snpan8l" path="res://sprites/HealthbarFront.png" id="4_4arys"]
 [ext_resource type="PackedScene" uid="uid://lfpeewpqnrfk" path="res://player.tscn" id="4_jka67"]
 [ext_resource type="Script" uid="uid://d0brfe7tnn8dw" path="res://scripts/DebugDraw.cs" id="4_wc5p8"]
 
@@ -42,6 +45,49 @@ transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1, 4)
 fov = 50.0
 size = 3.893
 script = ExtResource("1_jka67")
+
+[node name="HealthbarPlayer1Background" type="Sprite3D" parent="Camera3D" unique_id=533547314]
+transform = Transform3D(0.9, 0, 0, 0, 1.1, 0, 0, 0, 1, -2.044, 1.9, -5)
+pixel_size = 0.0005
+billboard = 1
+fixed_size = true
+texture = ExtResource("2_i5arm")
+
+[node name="HealthbarRed" type="Sprite3D" parent="Camera3D/HealthbarPlayer1Background" unique_id=990763432]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0.001)
+pixel_size = 0.0005
+billboard = 1
+fixed_size = true
+texture = ExtResource("3_jsk3o")
+
+[node name="HealthbarYellow" type="Sprite3D" parent="Camera3D/HealthbarPlayer1Background" unique_id=832721342]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0.002)
+pixel_size = 0.0005
+billboard = 1
+fixed_size = true
+texture = ExtResource("4_4arys")
+
+[node name="HealthbarPlayer2Background" type="Sprite3D" parent="Camera3D" unique_id=1534985581]
+transform = Transform3D(0.9, 0, 0, 0, 1.1, 0, 0, 0, 1, 2, 1.9, -5)
+pixel_size = 0.0005
+billboard = 1
+fixed_size = true
+texture = ExtResource("2_i5arm")
+
+[node name="HealthbarRed" type="Sprite3D" parent="Camera3D/HealthbarPlayer2Background" unique_id=2013896093]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0.001)
+pixel_size = 0.0005
+billboard = 1
+fixed_size = true
+texture = ExtResource("3_jsk3o")
+
+[node name="HealthbarYellow" type="Sprite3D" parent="Camera3D/HealthbarPlayer2Background" unique_id=1154613590]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0.002)
+flip_h = true
+pixel_size = 0.0005
+billboard = 1
+fixed_size = true
+texture = ExtResource("4_4arys")
 
 [node name="WorldEnvironment" type="WorldEnvironment" parent="." unique_id=1620655634]
 environment = SubResource("Environment_s68cd")

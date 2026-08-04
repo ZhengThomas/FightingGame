@@ -147,6 +147,8 @@ public partial class Player : Node3D
 {
     [Export] public bool ShowDebug = true;
     [Export] public int PlayerNumber = 1;
+    public const int MaxHealth = 1000;
+    public int Health;
     // Durable per-tick record of this player's raw inputs, indexed by absolute FrameCount.
     // Written once per real physics frame by whoever considers this player local (currently
     // always InputManager). Any re-simulation reads back from here — never from live keys.
@@ -221,6 +223,7 @@ public partial class Player : Node3D
         // Scene placement is in world floats; bake into sim ints once.
         SimX = PlayerConstants.ToSim(Position.X);
         SimY = PlayerConstants.ToSim(Position.Y);
+        Health = MaxHealth;
         SyncVisualPosition();
 
         lastFacing = PlayerNumber == 1 ? FacingDirection.Right : FacingDirection.Left;
@@ -331,6 +334,7 @@ public partial class Player : Node3D
         CurrentBufferWindow = currentBufferWindow,
         Marks = Marks,
         Hitboxes = hitboxes,
+        Health = Health,
     };
 
     // Overwrite every sim-critical field on this Player from a PlayerSnapshot. Also blanks the
@@ -359,6 +363,7 @@ public partial class Player : Node3D
         currentBufferWindow = s.CurrentBufferWindow;
         Marks = s.Marks;
         hitboxes = s.Hitboxes;
+        Health = s.Health;
         SyncVisualPosition();
     }
 
@@ -368,6 +373,14 @@ public partial class Player : Node3D
             if (hitHistory[i] == attackId)
                 return true;
         return false;
+    }
+
+    // Subtract damage from Health, clamped at 0. Grabs call this manually from their sequence
+    // handler so the damage tick can be timed to the animation.
+    public void TakeDamage(int amount)
+    {
+        if (amount <= 0) return;
+        Health = Math.Max(0, Health - amount);
     }
 
     public virtual bool TakeHit(HitboxData data, int attackId, int direction, Player attacker)
@@ -391,8 +404,8 @@ public partial class Player : Node3D
 
         int baseHitstun = data.HitStun > 0 ? data.HitStun : 15;
         hitReaction.Timer.Duration = ComboScaling.Apply(baseHitstun, hitstunScale);
-        // Damage when health exists:
-        //   ComboScaling.Apply(data.Damage, ComboScaling.Sample(ComboScaling.DamageScale, hitReaction.DamageScaleIndex))
+        int damageScale = ComboScaling.Sample(ComboScaling.DamageScale, hitReaction.DamageScaleIndex);
+        TakeDamage(ComboScaling.Apply(data.Damage, damageScale));
         // Last hit wins: only hitboxes tagged CausesHardKnockdown force the long KD on landing.
         hitReaction.HardKnockdown = data.CausesHardKnockdown;
         reactionFlashId++;
