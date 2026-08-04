@@ -4,12 +4,14 @@
 [ext_resource type="Shader" uid="uid://b3ilrhxr7thy2" path="res://shaders/generic_smear.gdshader" id="2_hlpvk"]
 
 [sub_resource type="ShaderMaterial" id="ShaderMaterial_5hu28"]
+resource_local_to_scene = true
 render_priority = 0
 shader = ExtResource("2_hlpvk")
 shader_parameter/flat_color = Color(0.9372549, 0.8235294, 0.7647059, 1)
 shader_parameter/opacity = 1.0
 shader_parameter/ortho_amount = 0.7
 shader_parameter/plane_distance = 4.0
+shader_parameter/depth_bias = 0.0
 
 [node name="CrouchLight" type="Node3D" unique_id=557679341]
 

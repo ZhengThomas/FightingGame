@@ -5,10 +5,14 @@
 [ext_resource type="Texture2D" uid="uid://c5xi11eafmqv3" path="res://models/CharacterModellingAttemp3_SlashTexture.png" id="3_4cmww"]
 
 [sub_resource type="ShaderMaterial" id="ShaderMaterial_kr8q2"]
+resource_local_to_scene = true
 render_priority = 0
 shader = ExtResource("2_6q1ay")
 shader_parameter/slash_texture = ExtResource("3_4cmww")
 shader_parameter/opacity = 1.0
+shader_parameter/ortho_amount = 0.7
+shader_parameter/plane_distance = 4.0
+shader_parameter/depth_bias = 0.0
 
 [node name="JumpHeavy" type="Node3D" unique_id=996752269]
 

@@ -4,6 +4,7 @@
 [ext_resource type="Shader" uid="uid://b3ilrhxr7thy2" path="res://shaders/generic_smear.gdshader" id="2_n5484"]
 
 [sub_resource type="ShaderMaterial" id="ShaderMaterial_6auix"]
+resource_local_to_scene = true
 render_priority = 0
 shader = ExtResource("2_n5484")
 shader_parameter/flat_color = Color(0.6039216, 0.11764706, 0.1254902, 1)

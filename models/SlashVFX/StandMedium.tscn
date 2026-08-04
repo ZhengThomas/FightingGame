@@ -5,12 +5,14 @@
 [ext_resource type="Texture2D" uid="uid://c5xi11eafmqv3" path="res://models/CharacterModellingAttemp3_SlashTexture.png" id="3_kf84k"]
 
 [sub_resource type="ShaderMaterial" id="ShaderMaterial_or8w8"]
+resource_local_to_scene = true
 render_priority = 0
 shader = ExtResource("2_jf3h0")
 shader_parameter/slash_texture = ExtResource("3_kf84k")
 shader_parameter/opacity = 1.0
 shader_parameter/ortho_amount = 0.7
 shader_parameter/plane_distance = 4.0
+shader_parameter/depth_bias = 0.0
 
 [node name="StandMedium" type="Node3D" unique_id=1575987241]
 transform = Transform3D(0.9, 0, 0, 0, 1, 0, 0, 0, 1, -0.5, 0, 0)
