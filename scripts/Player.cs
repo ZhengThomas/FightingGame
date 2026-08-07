@@ -171,7 +171,7 @@ public partial class Player : Node3D
     JumpState jump = new JumpState { JumpSquatFrame = -1, AirdashFrame = -1, LandingFrame = -1 };
     ActiveMoveState currentMove = ActiveMoveState.None;
     // Fixed-size pool of live hitboxes this player has spawned. Each slot is either inactive
-    // (HitboxDataId = -1) or a live HitboxInstance with its own Frame counter and ActiveDuration.
+    // (HitboxDataId = 0) or a live HitboxInstance with its own Frame counter and ActiveDuration.
     HitboxSlots hitboxes;
 
     public PlayerState CurrentState => currentState;
@@ -652,6 +652,8 @@ public partial class Player : Node3D
         if (holdingNeutral) return false;
         for (int i = 0; i <= PlayerConstants.CrossupProtectionWindow; i++)
         {
+            // Early in a match the buffer doesn't reach back this far — no history, no crossup.
+            if (!Match.HasGameState(i)) break;
             (int ax, int dx) = Match.GetHistoricalSimX(attacker, this, i);
             bool attackerWasToRight = ax > dx;
 

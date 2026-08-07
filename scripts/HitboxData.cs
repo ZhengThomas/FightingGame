@@ -6,18 +6,21 @@ public class HitboxData
 {
     // Stable numeric identity assigned by Register. HitboxInstance stores this id instead of
     // a class reference so it stays a value type that snapshots by copy.
-    public int Id { get; internal set; } = -1;
+    // 0 = unregistered, which HitboxInstance reads as an inactive slot.
+    public int Id { get; internal set; }
 
     static HitboxData[] byId;
 
+    // Ids are 1-based so a zeroed HitboxSlots reads as eight empty slots rather than eight
+    // live copies of the hitbox registered first.
     public static void Register(params HitboxData[] hitboxes)
     {
         byId = hitboxes;
-        for (int i = 0; i < hitboxes.Length; i++) hitboxes[i].Id = i;
+        for (int i = 0; i < hitboxes.Length; i++) hitboxes[i].Id = i + 1;
     }
 
     public static HitboxData LookupById(int id)
-        => (byId != null && id >= 0 && id < byId.Length) ? byId[id] : null;
+        => (byId != null && id >= 1 && id <= byId.Length) ? byId[id - 1] : null;
 
     // Geometry per frame-since-this-hitbox-spawned (0-based). Missing/null entries fall back to
     // the most recent non-null one via LookBackForBoxes, matching the MoveData.HurtboxesPerFrame

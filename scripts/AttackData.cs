@@ -36,21 +36,22 @@ public struct HitboxSpawn
 public class MoveData
 {
     // Stable numeric identity for this move, assigned once at startup by MoveData.Register.
-    public int Id { get; internal set; } = -1;
+    // 0 = unregistered, which ActiveMoveState reads as "no move".
+    public int Id { get; internal set; }
 
     static MoveData[] byId;
 
-    // Called once during static init from Moveset. Assigns each move a stable id equal to its
-    // position in the argument list, then remembers the array for LookupById.
+    // Called once during static init from Moveset. Ids are 1-based so that a zeroed
+    // ActiveMoveState / PlayerSnapshot can't masquerade as the move registered first.
     public static void Register(params MoveData[] moves)
     {
         byId = moves;
         for (int i = 0; i < moves.Length; i++)
-            moves[i].Id = i;
+            moves[i].Id = i + 1;
     }
 
     public static MoveData LookupById(int id)
-        => (byId != null && id >= 0 && id < byId.Length) ? byId[id] : null;
+        => (byId != null && id >= 1 && id <= byId.Length) ? byId[id - 1] : null;
 
     // Name of the AnimationPlayer clip this move plays.
     public string AnimationName = "";

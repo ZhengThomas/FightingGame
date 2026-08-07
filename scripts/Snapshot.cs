@@ -5,41 +5,39 @@ using System.Collections.Generic;
 // A bunch of containers that make the current state easy to snapshot
 // Every field must itself be a value type (structs, ints, enums, bools).
 
-// The mutable per-tick state of the one currently-playing move, as a value type. Replaces the
-// previous ActiveMove class — MoveData now lives elsewhere (immutable, referenced by numeric
-// Id) so this struct itself carries no references and copies cleanly into snapshots.
-//
-// MoveDataId = -1 means "no active move" (previously represented as `currentMove == null`).
+// The mutable per-tick state of the one currently-playing move, as a value type. MoveData is
+// immutable and referenced by numeric Id, so this struct carries no references and copies
+// cleanly into snapshots.
 public struct ActiveMoveState
 {
-    public int MoveDataId;   // -1 = none; otherwise index into MoveData.LookupById
+    public int MoveDataId;   // 0 = none; otherwise a MoveData.LookupById id
     public int InstanceId;   // per-attack unique id (PlayerNumber * 1M + FrameCount at press)
     public int Frame;
     public bool HitLanded;
     public bool Blocked;
 
-    public readonly bool HasMove => MoveDataId >= 0;
+    public readonly bool HasMove => MoveDataId > 0;
     public readonly MoveData Data => MoveData.LookupById(MoveDataId);
 
-    // Sentinel "no move" value. Struct default (all zeros, MoveDataId = 0) would incorrectly
-    // point at whichever move is registered as Id 0, so use this explicit factory instead.
-    public static ActiveMoveState None => new ActiveMoveState { MoveDataId = -1 };
+    // Ids start at 1, so an all-zero struct already reads as "no move".
+    public static ActiveMoveState None => default;
 }
 
 // One live hitbox spawned by a move. 
 public struct HitboxInstance
 {
-    public int HitboxDataId;   // -1 = inactive slot
+    public int HitboxDataId;   // 0 = inactive slot
     public int InstanceId;     // unique per spawn; defender's hitHistory keys off this
     public int Frame;          // 0-based ticks since spawn; expires when Frame >= Data.ActiveDuration
     public bool HitLanded;     // set true when a hit lands (drives combo scaling / cancel eligibility)
     public bool Blocked;       // set true when the landed hit was blocked
     public int FacingAtSpawn;  // +1 (right) / -1 (left) — locked at spawn so the hitbox stays on the same side even if the owner turns around
 
-    public readonly bool IsActive => HitboxDataId >= 0;
+    public readonly bool IsActive => HitboxDataId > 0;
     public readonly HitboxData Data => HitboxData.LookupById(HitboxDataId);
 
-    public static HitboxInstance None => new HitboxInstance { HitboxDataId = -1 };
+    // Ids start at 1, so an all-zero struct (and a fresh HitboxSlots) already reads as inactive.
+    public static HitboxInstance None => default;
 }
 
 // Fixed 8-slot pool of live hitboxes per player, stored inline so the PlayerSnapshot struct

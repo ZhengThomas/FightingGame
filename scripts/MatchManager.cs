@@ -61,10 +61,18 @@ public partial class MatchManager : Node
         stateHistory[SlotFor(FrameCount - 1)] = CaptureSnapshot();
     }
 
+    // True if the buffer actually holds the frame `framesAgo` back — inside the ring, and not
+    // before the match started.
+    public bool HasGameState(int framesAgo)
+        => framesAgo >= 0 && framesAgo < StateHistorySize && FrameCount - 1 - framesAgo >= 0;
+
     // framesAgo = 0 → the frame that most recently finished, 1 → one frame before that, etc.
+    // Reaching past what the buffer holds clamps to its oldest recorded frame
     public Snapshot GetGameState(int framesAgo)
     {
-        return stateHistory[SlotFor(FrameCount - 1 - framesAgo)];
+        if (FrameCount == 0) return CaptureSnapshot();
+        int oldest = Math.Min(StateHistorySize, FrameCount) - 1;
+        return stateHistory[SlotFor(FrameCount - 1 - Math.Clamp(framesAgo, 0, oldest))];
     }
 
     public (int attackerX, int defenderX) GetHistoricalSimX(Player attacker, Player defender, int framesAgo)
