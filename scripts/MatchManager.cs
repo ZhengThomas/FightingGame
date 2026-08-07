@@ -115,13 +115,8 @@ public partial class MatchManager : Node
 	// even before the hit connects.
 	public void BringToFront(Player player) => frontPlayerNumber = player?.PlayerNumber ?? 0;
 
-	DebugManager debug;
-	InputManager inputManager;
-
     public override void _Ready()
     {
-		debug = GetNode<DebugManager>("/root/DebugManager");
-		inputManager = GetNode<InputManager>("/root/InputManager");
         DebugDraw = GetNode<DebugDraw>("/root/ActualFighting/DebugLayer/DebugDraw");
     }
 
@@ -288,12 +283,6 @@ public partial class MatchManager : Node
 		defender.ClearPushbackVelocity();
 	}
 
-	public override void _PhysicsProcess(double delta)
-	{
-		if (debug.ShouldTick) Tick();
-		DrawDebugBoxes();
-	}
-
 	// Advance the simulation by exactly one tick. Safe to call multiple times in a row for rollback
 	public void Tick()
 	{
@@ -423,7 +412,7 @@ public partial class MatchManager : Node
 		DebugDraw.DrawWorldBox(player, indicator, color);
 	}
 
-	private void DrawDebugBoxes()
+	public void DrawDebugBoxes()
 	{
 		if (DebugDraw == null) return;
 		if (Player1 != null && Player1.ShowDebug)

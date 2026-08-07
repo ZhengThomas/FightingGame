@@ -3,7 +3,6 @@
 [ext_resource type="Script" uid="uid://c5afarsbnebem" path="res://scripts/CameraController.cs" id="1_jka67"]
 [ext_resource type="Shader" uid="uid://csifhdipq5x7" path="res://defualtGridShader.gdshader" id="1_r3fl7"]
 [ext_resource type="Texture2D" uid="uid://dgg7st3bcbham" path="res://sprites/HealthbarBackground.png" id="2_i5arm"]
-[ext_resource type="Script" uid="uid://fn2tqsh65fm8" path="res://scripts/MatchManager.cs" id="2_jka67"]
 [ext_resource type="Texture2D" uid="uid://c5702db38qe5x" path="res://sprites/HealthbarBack.png" id="3_jsk3o"]
 [ext_resource type="Texture2D" uid="uid://cr26m2snpan8l" path="res://sprites/HealthbarFront.png" id="4_4arys"]
 [ext_resource type="PackedScene" uid="uid://lfpeewpqnrfk" path="res://player.tscn" id="4_jka67"]
@@ -109,7 +108,7 @@ fixed_size = true
 texture = ExtResource("4_4arys")
 region_enabled = true
 
-[node name="HealthbarHud" type="Node3D" parent="Camera3D" unique_id=633452886 node_paths=PackedStringArray("P1Fill", "P1Trail", "P2Fill", "P2Trail", "P1", "P2", "Match")]
+[node name="HealthbarHud" type="Node3D" parent="Camera3D" unique_id=633452886 node_paths=PackedStringArray("P1Fill", "P1Trail", "P2Fill", "P2Trail", "P1", "P2")]
 script = ExtResource("5_4arys")
 P1Fill = NodePath("../HealthbarPlayer1Background/HealthbarYellow")
 P1Trail = NodePath("../HealthbarPlayer1Background/HealthbarRed")
@@ -117,7 +116,6 @@ P2Fill = NodePath("../HealthbarPlayer2Background/HealthbarYellow")
 P2Trail = NodePath("../HealthbarPlayer2Background/HealthbarRed")
 P1 = NodePath("../../MatchManager/Player")
 P2 = NodePath("../../MatchManager/Player2")
-Match = NodePath("../../MatchManager")
 TrailDelayFrames = 50
 TrailFollowPerFrame = 0.015
 
@@ -150,7 +148,6 @@ size = Vector3(10, 0.5, 15)
 material = SubResource("ShaderMaterial_8h4pb")
 
 [node name="MatchManager" type="Node3D" parent="." unique_id=1815988755]
-script = ExtResource("2_jka67")
 
 [node name="Player" parent="MatchManager" unique_id=500866665 instance=ExtResource("4_jka67")]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -1.5, -0.8, 0)

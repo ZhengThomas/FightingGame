@@ -450,20 +450,19 @@ public partial class InputManager : Node
         Grab = Key.L,
     };
 
-    DebugManager debug;
     MatchManager match;
 
     public override void _Ready()
     {
-        debug = GetNode<DebugManager>("/root/DebugManager");
         match = GetNode<MatchManager>("/root/MatchManager");
     }
 
-    public override void _PhysicsProcess(double delta)
+    // Record both players' inputs under `frame`. MatchDriver calls this immediately before the
+    // tick that consumes them.
+    public void PollLocalInputs(int frame)
     {
-        if (!debug.ShouldTick) return;
-        ReadPlayerInput(match.Player1, P1Bindings);
-        ReadPlayerInput(match.Player2, P2Bindings);
+        ReadPlayerInput(match.Player1, P1Bindings, frame);
+        ReadPlayerInput(match.Player2, P2Bindings, frame);
     }
 
     // Read live keyboard for this local player and record the frame into the durable per-tick
@@ -474,7 +473,7 @@ public partial class InputManager : Node
     // When a networked "remote" player exists later, its input source will be a NetworkManager
     // that calls player.InputLog.Set(...) from received packets instead of this method — same
     // shape, different writer.
-    private void ReadPlayerInput(Player player, InputBindings bindings)
+    private void ReadPlayerInput(Player player, InputBindings bindings, int frame)
     {
         if (player == null) return;
 
@@ -487,7 +486,7 @@ public partial class InputManager : Node
         if (left && right) { left = false; right = false; }
         if (up && down)    { up   = false; down  = false; }
 
-        InputFrame frame = new InputFrame
+        InputFrame input = new InputFrame
         {
             Left         = left,
             Right        = right,
@@ -501,6 +500,6 @@ public partial class InputManager : Node
             Grab         = Input.IsKeyPressed(bindings.Grab),
         };
 
-        player.InputLog.Set(match.FrameCount, frame);
+        player.InputLog.Set(frame, input);
     }
 }

@@ -1,17 +1,13 @@
 using Godot;
 
-// Polls both players' Health each frame and drives the yellow fills + red trails.
-// Yellow snaps to the current value. The red trail stays frozen during a combo
-// (any hit resets a settle counter) and only starts closing on yellow once
-// TrailDelayFrames sim frames have passed with no damage.
+// Drives the yellow health fills and the red damage trails from both players' Health.
+// Yellow snaps to the current value. Red holds while a combo is running — any drop restarts a
+// settle counter — and only closes on yellow once TrailDelayFrames sim frames pass without damage.
 //
-// All timing is in sim frames, not real time — hitpause freezes the counter so
-// the trail doesn't drift while the world is paused.
+// Timing is in sim frames, so hit pause freezes the trail along with everything else.
 //
-// Editor setup for the 4 fill sprites:
-//  - Centered = false
-//  - Region Enabled = true (safety-net'd on in _Ready)
-//  - Offset set to the padding inside the bg (e.g. (10, 4)).
+// Editor setup for the 4 fill sprites: Centered = false, Region Enabled = true (forced on in
+// _Ready), Offset set to the padding inside the background (e.g. (10, 4)).
 public partial class HealthBarHud : Node3D
 {
     [Export] public Sprite3D P1Fill;
@@ -20,85 +16,98 @@ public partial class HealthBarHud : Node3D
     [Export] public Sprite3D P2Trail;
     [Export] public Player P1;
     [Export] public Player P2;
-    [Export] public MatchManager Match;
 
     // Sim frames after the last hit before the red trail starts catching up.
     [Export] public int TrailDelayFrames = 45;
     // Health-percent the trail closes on yellow per sim frame, once the delay expires.
     [Export] public float TrailFollowPerFrame = 0.01f;
 
-    float p1TrailPct = 1f, p2TrailPct = 1f;
-    // Sim frames since last damage. Starts large so match-start doesn't hold the trail.
-    int p1SettleFrames = int.MaxValue;
-    int p2SettleFrames = int.MaxValue;
-    float p1LastPct = 1f, p2LastPct = 1f;
+    // One side's sprites plus its trail animation state. Purely visual — all of it is derived
+    // from Player.Health, so none of it is snapshotted.
+    class Bar
+    {
+        public Sprite3D Fill, Trail;
+        public Player Player;
+        public bool ShrinkFromRight;
+        public Vector2 FillHome, TrailHome;
+        public float TrailPct = 1f;
+        public float LastPct = 1f;
+        public int SettleFrames;
+    }
+
+    MatchManager match;
+    Bar[] bars;
     int lastSimFrame;
-    Vector2 p1FillOffsetHome, p1TrailOffsetHome, p2FillOffsetHome, p2TrailOffsetHome;
 
     public override void _Ready()
     {
-        P1Fill.RegionEnabled = true;
-        P1Trail.RegionEnabled = true;
-        P2Fill.RegionEnabled = true;
-        P2Trail.RegionEnabled = true;
+        match = GetNode<MatchManager>("/root/MatchManager");
+        bars = new[]
+        {
+            MakeBar(P1Fill, P1Trail, P1, shrinkFromRight: false),
+            MakeBar(P2Fill, P2Trail, P2, shrinkFromRight: true),
+        };
+        lastSimFrame = match.SimFrame;
+    }
 
-        p1FillOffsetHome  = P1Fill.Offset;
-        p1TrailOffsetHome = P1Trail.Offset;
-        p2FillOffsetHome  = P2Fill.Offset;
-        p2TrailOffsetHome = P2Trail.Offset;
-
-        lastSimFrame = Match.SimFrame;
+    Bar MakeBar(Sprite3D fill, Sprite3D trail, Player player, bool shrinkFromRight)
+    {
+        fill.RegionEnabled = true;
+        trail.RegionEnabled = true;
+        return new Bar
+        {
+            Fill = fill,
+            Trail = trail,
+            Player = player,
+            ShrinkFromRight = shrinkFromRight,
+            FillHome = fill.Offset,
+            TrailHome = trail.Offset,
+            SettleFrames = TrailDelayFrames, // start settled so match start doesn't hold the trail
+        };
     }
 
     public override void _Process(double delta)
     {
-        int simDelta = Match.SimFrame - lastSimFrame;
-        lastSimFrame = Match.SimFrame;
+        // Clamped at zero: a rollback rewinds SimFrame, and a negative delta would walk the settle
+        // counter down and grow the trail back.
+        int simDelta = Mathf.Max(0, match.SimFrame - lastSimFrame);
+        lastSimFrame = match.SimFrame;
 
-        float p1Pct = (float)P1.Health / Player.MaxHealth;
-        float p2Pct = (float)P2.Health / Player.MaxHealth;
-
-        p1TrailPct = UpdateTrail(p1Pct, p1TrailPct, ref p1SettleFrames, ref p1LastPct, simDelta);
-        p2TrailPct = UpdateTrail(p2Pct, p2TrailPct, ref p2SettleFrames, ref p2LastPct, simDelta);
-
-        SetRegion(P1Fill,  p1FillOffsetHome,  p1Pct,      shrinkFromRight: false);
-        SetRegion(P1Trail, p1TrailOffsetHome, p1TrailPct, shrinkFromRight: false);
-        SetRegion(P2Fill,  p2FillOffsetHome,  p2Pct,      shrinkFromRight: true);
-        SetRegion(P2Trail, p2TrailOffsetHome, p2TrailPct, shrinkFromRight: true);
+        foreach (Bar bar in bars)
+            UpdateBar(bar, simDelta);
     }
 
-    // Freeze the trail while a combo is in progress (any yellow drop resets settleFrames).
-    // Once no damage has been taken for TrailDelayFrames sim frames, the trail eases down.
-    float UpdateTrail(float yellowPct, float trailPct, ref int settleFrames, ref float lastPct, int simDelta)
+    void UpdateBar(Bar bar, int simDelta)
     {
-        if (yellowPct < lastPct) settleFrames = 0;
-        else settleFrames = SafeAdd(settleFrames, simDelta);
-        lastPct = yellowPct;
+        float pct = (float)bar.Player.Health / Player.MaxHealth;
 
-        // Heal / round reset — snap up so red doesn't awkwardly lag above yellow.
-        if (trailPct < yellowPct) return yellowPct;
+        // Capped at the threshold so it can't run away over a long match.
+        bar.SettleFrames = pct < bar.LastPct
+            ? 0
+            : Mathf.Min(bar.SettleFrames + simDelta, TrailDelayFrames);
+        bar.LastPct = pct;
 
-        if (settleFrames < TrailDelayFrames) return trailPct;
+        if (bar.TrailPct < pct)
+            bar.TrailPct = pct; // heal / round reset — snap up so red isn't stranded below yellow
+        else if (bar.SettleFrames >= TrailDelayFrames)
+            bar.TrailPct = Mathf.Max(pct, bar.TrailPct - TrailFollowPerFrame * simDelta);
 
-        return Mathf.Max(yellowPct, trailPct - TrailFollowPerFrame * simDelta);
+        SetRegion(bar.Fill, bar.FillHome, pct, bar.ShrinkFromRight);
+        SetRegion(bar.Trail, bar.TrailHome, bar.TrailPct, bar.ShrinkFromRight);
     }
 
-    static int SafeAdd(int a, int b) => (a > int.MaxValue - b) ? int.MaxValue : a + b;
-
-    static void SetRegion(Sprite3D fill, Vector2 offsetHome, float pct, bool shrinkFromRight)
+    static void SetRegion(Sprite3D sprite, Vector2 offsetHome, float pct, bool shrinkFromRight)
     {
         pct = Mathf.Clamp(pct, 0f, 1f);
-        fill.Visible = pct > 0f;
+        sprite.Visible = pct > 0f;
         if (pct <= 0f) return;
 
-        float texW = fill.Texture.GetWidth();
-        float texH = fill.Texture.GetHeight();
+        float texW = sprite.Texture.GetWidth();
+        float texH = sprite.Texture.GetHeight();
         float visibleW = texW * pct;
-        fill.RegionRect = new Rect2(texW - visibleW, 0f, visibleW, texH);
+        sprite.RegionRect = new Rect2(texW - visibleW, 0f, visibleW, texH);
 
         if (!shrinkFromRight)
-        {
-            fill.Offset = new Vector2(offsetHome.X + texW * (1f - pct), offsetHome.Y);
-        }
+            sprite.Offset = new Vector2(offsetHome.X + texW * (1f - pct), offsetHome.Y);
     }
 }
