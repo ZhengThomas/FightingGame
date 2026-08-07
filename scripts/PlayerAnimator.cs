@@ -1,8 +1,14 @@
 using Godot;
 using System.Collections.Generic;
 
-// Drives the animated character model based on its parent Player's state.
-// This is a self-contained visual layer: Player has no animation code and never calls into here.
+// Draws whatever animation state the sim decided on. All the decisions live in PlayerAnimFsm —
+// this node maps AnimState to a clip name, keeps the clip at the frame the FSM says, and mirrors
+// the model to face the opponent.
+//
+// It deliberately keeps no timeline of its own. The only state here is what was drawn last frame,
+// used to pick between crossfading, advancing, and hard-seeking. If that's ever wrong the worst
+// case is one frame of visual pop.
+//
 // Put this on a child node of a Player, with ModelPath pointing at the imported model
 // (the node that contains an AnimationPlayer).
 public partial class PlayerAnimator : Node3D
@@ -33,15 +39,14 @@ public partial class PlayerAnimator : Node3D
     [Export] public string AirdashForwardAnim = "AirdashForwards";
     [Export] public string AirdashBackAnim = "AirdashBackwards";
 
-    // One-shot transition clips: played once on a state change, then handing off to the loop.
-    // Enter transitions depend only on the state entered; exit transitions depend on the state left.
-    [Export] public string RunStartAnim = "RunStart";       // enter run
-    [Export] public string RunStopAnim = "RunStop";         // exit run -> standing
-    [Export] public string CrouchDownAnim = "CrouchDown";   // enter crouch
-    [Export] public string CrouchStandAnim = "StandUp";     // exit crouch -> standing
+    // One-shot clips. Their frame counts are mirrored in PlayerAnimFsm, which needs the lengths
+    // sim-side to know when each one ends — change a clip's length and update it there too.
+    [Export] public string RunStartAnim = "RunStart";
+    [Export] public string RunStopAnim = "RunStop";
+    [Export] public string CrouchDownAnim = "CrouchDown";
+    [Export] public string CrouchStandAnim = "StandUp";
 
-    // Seconds of cross-fade when switching clips. This is what smooths the walk->idle snap.
-    // It's time-based, but driven by our manual Advance(), so it still respects tick-lock/pause.
+    // Seconds of cross-fade when switching clips.
     [Export] public float BlendTime = 0.08f;
 
     // --- Hybrid (horizontal-orthographic) projection ---
@@ -65,25 +70,13 @@ public partial class PlayerAnimator : Node3D
     protected AnimationPlayer animPlayer;
     protected Basis modelBaseBasis;   // the model's editor orientation/scale = "facing right"
     protected Vector3 modelBaseOrigin;
-    protected string currentAnim;
 
-    // The state we were in last tick, and how many ticks remain in the current transition clip
-    // (0 = no transition in progress, just play the steady-state loop).
-    protected PlayerState prevState;
-    // Id of the attack that was active last tick.
-    protected int lastMoveId = -1;
-    // Last seen Player.ReactionFlashId — used to restart hurt/block clips on re-hit.
-    protected int lastReactionFlashId = -1;
-    protected int transitionTicksLeft;
-    // Last SimFrame we polled. Compared against Match.SimFrame each _Process to detect how many
-    // sim ticks have elapsed since our last update — usually 1, but can be several during a
-    // rollback catch-up, and 0 during hit pause (SimFrame is the "non-hit-pause tick" counter,
-    // which naturally freezes the animation clock without any extra flag on our side).
-    protected int lastObservedSimFrame = 0;
-    // While a one-shot transition is playing, a state change only cuts it short if the incoming
-    // state's priority is >= this threshold. Locomotion sits below every threshold, so wandering
-    // between idle/walk can't cancel a stop/turn clip; committing to a jump/crouch/attack can.
-    protected int transitionCancelThreshold;
+    // What was on screen last frame, so we can tell a fresh clip from a continuing one and a
+    // rollback rewind from normal forward progress.
+    protected string currentAnim;
+    protected AnimState lastState;
+    protected int lastToken;
+    protected int lastFrame = -1;
 
     // Every hybrid-projection material we created, so we can update plane_distance each frame to
     // match the camera's current distance (keeps character size consistent with the world at any zoom).
@@ -126,18 +119,16 @@ public partial class PlayerAnimator : Node3D
         }
         else
         {
-            // We advance the animation ourselves, one game tick at a time, so it stays
+            // We drive the clip position ourselves from the FSM's frame counter, so it stays
             // locked to the fixed simulation and freezes whenever the game isn't ticking
             // (paused with the freeze key, single-stepping, or during hit pause).
             animPlayer.CallbackModeProcess = AnimationMixer.AnimationCallbackModeProcess.Manual;
 
-            // Transition clips play once and hold; don't let them loop.
+            // One-shot and reaction clips hold their last frame instead of looping.
             ForceNoLoop(RunStartAnim);
             ForceNoLoop(RunStopAnim);
             ForceNoLoop(CrouchDownAnim);
             ForceNoLoop(CrouchStandAnim);
-
-            // Reaction / one-shot state clips also hold their last frame instead of looping.
             ForceNoLoop(LandingAnim);
             ForceNoLoop(WakeupAnim);
             ForceNoLoop(HurtAnim);
@@ -154,13 +145,9 @@ public partial class PlayerAnimator : Node3D
         if (UseHybridProjection)
             ApplyHybridProjection(model);
 
-        prevState = player.CurrentState;
-
-        // Apply an initial pose (frame 0 of idle) so we don't sit in the bind/T-pose.
-        // No Ticked-signal subscription: _Process polls Match.FrameCount and drives the
-        // animation clock itself, so rollback catch-up ticks are absorbed silently.
-        UpdatePose(1);
-        animPlayer?.Advance(0.0);
+        // Apply an initial pose so we don't sit in the bind/T-pose.
+        UpdateFacing();
+        UpdateAnimation();
     }
 
     // Walks the model and replaces each surface's material with our hybrid-projection shader,
@@ -231,44 +218,114 @@ public partial class PlayerAnimator : Node3D
             ApplyHybridToNode(child, bodyShader, outlineShader);
     }
 
-    // Runs every real (wall-clock) frame. Does two independent jobs:
-    //   1. Polls the sim's tick counter and advances the animation by however many ticks
-    //      elapsed since last poll — usually 1 during normal play; can be several after a
-    //      rollback resim, in which case one call absorbs all the catch-up without visibly
-    //      replaying each intermediate state's clip.
-    //   2. Keeps the hybrid-projection shader's plane_distance synced to the camera so the
-    //      character scales consistently with the perspective world at every zoom level.
     public override void _Process(double delta)
     {
-        StepAnimationFromSim();
+        if (player == null || model == null) return;
+        UpdateFacing();
+        UpdateAnimation();
         UpdateHybridProjection();
     }
 
-    // Run state-change detection every real frame — even if the sim didn't advance since our
-    // last poll (hit pause, or a rollback that restored SimFrame to what it was before). This
-    // catches the rollback case: an under-the-hood state swap (say Jumping → StandAttacking
-    // with the same SimFrame value on either side of a resim) still needs the animator to
-    // observe "state changed, pick the correct clip" and crossfade to the right visual.
-    //
-    // Only advance the animation CLOCK if SimFrame actually moved forward. In normal play
-    // ticksElapsed is 1 and everything progresses one tick; in rollback-with-same-SimFrame
-    // ticksElapsed is 0 and PlayClip(...)/Seek runs but Advance doesn't, so the new clip
-    // crossfades in from frame 0. Godot's Play(name, blend) handles the crossfade internally.
-    protected virtual void StepAnimationFromSim()
+    // Face the opponent: editor pose faces right, facing left mirrors it across X (a flip, not a turn).
+    protected virtual void UpdateFacing()
     {
-        if (player == null || model == null || matchManager == null)
+        Basis basis = player.GetFacing() == FacingDirection.Left
+            ? MirrorX * modelBaseBasis
+            : modelBaseBasis;
+        model.Transform = new Transform3D(basis, modelBaseOrigin);
+    }
+
+    // Put the clip where the FSM says it should be.
+    //
+    // Entering a state crossfades from frame 0; staying in one advances by however many ticks
+    // elapsed (0 during hit pause, several after a rollback catch-up). A frame counter that moved
+    // backwards means the sim rewound, so we jump straight to the right spot instead.
+    protected virtual void UpdateAnimation()
+    {
+        if (animPlayer == null) return;
+
+        AnimatorState a = player.Anim;
+        string clip = ClipFor(a.Current);
+        if (string.IsNullOrEmpty(clip) || !animPlayer.HasAnimation(clip))
             return;
 
-        int currentSimFrame = matchManager.SimFrame;
-        int ticksElapsed = currentSimFrame - lastObservedSimFrame;
+        bool entered = a.Current != lastState || a.ClipToken != lastToken || lastFrame < 0;
 
-        UpdatePose(ticksElapsed);
-        if (ticksElapsed > 0)
+        if (entered)
         {
-            animPlayer?.Advance(PlayerConstants.FixedDelta * ticksElapsed);
-            lastObservedSimFrame = currentSimFrame;
+            // Same clip re-entered (a chain into the same attack, or a re-hit) has nothing to
+            // crossfade from, so it hard-cuts. Reactions snap too, so frame 1 reads immediately.
+            bool sameClip = clip == currentAnim;
+            float blend = sameClip || IsReaction(a.Current) ? 0f : BlendTime;
+            animPlayer.Play(clip, blend);
+            currentAnim = clip;
+            if (a.Frame > 0 || blend <= 0f)
+                animPlayer.Seek(SeekTime(clip, a.Frame), true);
         }
+        else if (a.Frame > lastFrame)
+        {
+            animPlayer.Advance((a.Frame - lastFrame) * PlayerConstants.FixedDelta);
+        }
+        else if (a.Frame < lastFrame)
+        {
+            animPlayer.Seek(SeekTime(clip, a.Frame), true);
+        }
+
+        lastState = a.Current;
+        lastToken = a.ClipToken;
+        lastFrame = a.Frame;
     }
+
+    // Frame number to clip time, wrapped for looping clips so a long-running loop doesn't seek
+    // past its end.
+    protected double SeekTime(string clip, int frame)
+    {
+        double t = frame * PlayerConstants.FixedDelta;
+        Animation a = animPlayer.GetAnimation(clip);
+        if (a != null && a.LoopMode != Animation.LoopModeEnum.None && a.Length > 0f)
+            t %= a.Length;
+        return t;
+    }
+
+    // The one place AnimState turns into a clip name. Attacks name their own clip in MoveData.
+    protected virtual string ClipFor(AnimState state) => state switch
+    {
+        AnimState.Idle           => IdleAnim,
+        AnimState.WalkForward    => WalkForwardAnim,
+        AnimState.WalkBack       => WalkBackwardAnim,
+        AnimState.RunStart       => RunStartAnim,
+        AnimState.Run            => RunAnim,
+        AnimState.RunStop        => RunStopAnim,
+        AnimState.CrouchDown     => CrouchDownAnim,
+        AnimState.Crouch         => CrouchAnim,
+        AnimState.StandUp        => CrouchStandAnim,
+        AnimState.Backdash       => BackdashAnim,
+        AnimState.JumpSquat      => JumpSquatAnim,
+        AnimState.JumpRise       => JumpRiseAnim,
+        AnimState.Fall           => FallAnim,
+        AnimState.Landing        => LandingAnim,
+        AnimState.AirdashForward => AirdashForwardAnim,
+        AnimState.AirdashBack    => AirdashBackAnim,
+        AnimState.Attack         => player.CurrentMove.Data?.AnimationName ?? IdleAnim,
+        AnimState.Hurt           => HurtAnim,
+        AnimState.AirHurtRise    => AirHurtRiseAnim,
+        AnimState.AirHurtFall    => AirHurtFallAnim,
+        AnimState.SoftKnockdown  => SoftKnockdownAnim,
+        AnimState.HardKnockdown  => KnockdownAnim,
+        AnimState.Wakeup         => WakeupAnim,
+        AnimState.Block          => BlockAnim,
+        AnimState.CrouchBlock    => CrouchBlockAnim,
+        AnimState.AirBlock       => AirBlockAnim,
+        _ => IdleAnim,
+    };
+
+    protected static bool IsReaction(AnimState state)
+        => state == AnimState.Hurt
+        || state == AnimState.AirHurtRise
+        || state == AnimState.AirHurtFall
+        || state == AnimState.Block
+        || state == AnimState.CrouchBlock
+        || state == AnimState.AirBlock;
 
     protected virtual void UpdateHybridProjection()
     {
@@ -298,226 +355,7 @@ public partial class PlayerAnimator : Node3D
         }
     }
 
-    // Sets facing (mirror) and runs the clip-selection logic, without advancing time.
-    // `ticksElapsed` is passed through to UpdateAnimation so the transition-clip countdown
-    // decrements the right amount when a rollback catch-up covers multiple sim ticks.
-    protected virtual void UpdatePose(int ticksElapsed)
-    {
-        // Face the opponent: editor pose faces right, facing left mirrors it across X (a flip, not a turn).
-        Basis basis = player.GetFacing() == FacingDirection.Left
-            ? MirrorX * modelBaseBasis
-            : modelBaseBasis;
-        model.Transform = new Transform3D(basis, modelBaseOrigin);
-
-        UpdateAnimation(ticksElapsed);
-    }
-
-    // Animation "commitment" priorities. A one-shot transition clip that's playing is only cut short
-    // by a state change whose priority is >= that transition's CancelThreshold (see GetTransition).
-    // Add finer tiers here later (e.g. a separate "hit" tier above actions) as you need them.
-    protected const int PriorityLocomotion = 0; // idle / walk — never interrupts a protected transition
-    protected const int PriorityAction     = 1; // jump / crouch / attack / dash / hit — does interrupt
-
-    // A one-shot clip plus the priority needed to cancel it early.
-    protected readonly record struct AnimTransition(string Clip, int CancelThreshold);
-
-    // How disruptive it is to *enter* a state. Only idle/walk are cheap locomotion; everything else
-    // is a committed action. This is what lets a stop/turn clip survive idle<->walk flicker but still
-    // get cancelled the instant you actually do something.
-    protected virtual int StatePriority(PlayerState state)
-        => (state == PlayerState.Idle || state == PlayerState.Walking)
-            ? PriorityLocomotion
-            : PriorityAction;
-
-    // Every poll:
-    //  - On a state change, (re)start that transition's clip or the loop — but only if we're not
-    //    already inside a protected transition that the incoming state isn't allowed to cancel.
-    //  - Always count down the running transition by `ticksElapsed` (usually 1, larger under
-    //    rollback catch-up); once it's done, resolve to the loop for whatever state we're in
-    //    *now* (so a dash-stop that finishes while holding back lands on walk-back).
-    protected virtual void UpdateAnimation(int ticksElapsed)
-    {
-        PlayerState state = player.CurrentState;
-        int moveId = player.IsAttacking() && player.CurrentMove.HasMove ? player.CurrentMove.InstanceId : -1;
-        bool newMove = moveId != -1 && moveId != lastMoveId;
-        bool newReaction = player.ReactionFlashId != lastReactionFlashId && IsReactionState(state);
-        bool startedClip = false;
-
-        if (state != prevState)
-        {
-            bool inProtectedTransition = transitionTicksLeft > 0;
-            bool canInterrupt = !inProtectedTransition
-                || StatePriority(state) >= transitionCancelThreshold;
-
-            if (canInterrupt)
-            {
-                AnimTransition? transition = GetTransition(prevState, state);
-                if (transition.HasValue && animPlayer != null && animPlayer.HasAnimation(transition.Value.Clip))
-                    PlayTransition(transition.Value.Clip, transition.Value.CancelThreshold);
-                else
-                    PlayLoop();
-                startedClip = true;
-            }
-            // else: the running transition is protected against this state — leave it playing.
-        }
-        else if (newMove)
-        {
-            // A new attack started without a state change (chaining/mashing into the same attack).
-            transitionTicksLeft = 0;
-            PlayClip(PickAnim(), forceRestart: true);
-            startedClip = true;
-        }
-        else if (newReaction)
-        {
-            // Re-hit / re-block while already in that reaction state (common in air juggles).
-            transitionTicksLeft = 0;
-            PlayClip(PickAnim(), forceRestart: true);
-            startedClip = true;
-        }
-
-        if (!startedClip)
-        {
-            if (transitionTicksLeft > 0)
-            {
-                transitionTicksLeft -= ticksElapsed;
-                if (transitionTicksLeft <= 0)
-                {
-                    transitionTicksLeft = 0;
-                    PlayLoop();
-                }
-            }
-            else
-            {
-                // No transition running: keep the loop up to date (catches within-state changes
-                // like walk direction flips or jump rise -> fall).
-                PlayLoop();
-            }
-        }
-
-        prevState = state;
-        lastMoveId = moveId;
-        lastReactionFlashId = player.ReactionFlashId;
-    }
-
-    protected static bool IsReactionState(PlayerState state)
-        => state == PlayerState.Hitstun
-        || state == PlayerState.AirHitstun
-        || state == PlayerState.Blockstun
-        || state == PlayerState.CrouchBlockstun
-        || state == PlayerState.AirBlockstun;
-
-    // The one-shot clip to play for a state change (plus what it takes to cancel it early), or null
-    // if the switch is instant. Exit transitions use PriorityAction so idle<->walk won't cancel them
-    // but any real action will.
-    protected virtual AnimTransition? GetTransition(PlayerState from, PlayerState to)
-    {
-        // Enter transitions (depend on the state being entered).
-        if (to == PlayerState.GroundDashing)                          return new AnimTransition(RunStartAnim, PriorityAction);
-        // Crouch down/stand up use a locomotion threshold so anything (even standing back up) cancels
-        // them instantly — keeps teabags feeling snappy instead of locked into the full clip.
-        if (to == PlayerState.Crouching && IsStandingState(from))     return new AnimTransition(CrouchDownAnim, PriorityLocomotion);
-
-        // Exit transitions (depend on the state being left, back to neutral standing).
-        if (from == PlayerState.GroundDashing && IsStandingState(to)) return new AnimTransition(RunStopAnim, PriorityAction);
-        if (from == PlayerState.Crouching     && IsStandingState(to)) return new AnimTransition(CrouchStandAnim, PriorityLocomotion);
-
-        return null;
-    }
-
-    protected static bool IsStandingState(PlayerState state)
-        => state == PlayerState.Idle || state == PlayerState.Walking;
-
-    // Steady-state clip for the current state (the loop that plays once a transition finishes).
-    protected virtual string PickAnim()
-    {
-        // Attacks are data-driven: the active move names its own clip, so a single attack state can
-        // drive any of its moves' animations. Falls through to the state defaults if no clip is set.
-        if (player.IsAttacking())
-        {
-            string moveAnim = player.CurrentMove.Data?.AnimationName;
-            if (!string.IsNullOrEmpty(moveAnim))
-                return moveAnim;
-        }
-
-        return player.CurrentState switch
-        {
-            PlayerState.Walking          => WalkAnimForDirection(),
-            PlayerState.GroundDashing    => RunAnim, // "run" == forward dash in this game
-            PlayerState.Backdashing      => BackdashAnim,
-            PlayerState.Crouching or PlayerState.CrouchAttacking => CrouchAnim,
-            PlayerState.JumpSquat        => JumpSquatAnim,
-            PlayerState.Jumping or PlayerState.AirAttacking
-                => player.Physics.VelocityY > 0 ? JumpRiseAnim : FallAnim,
-            PlayerState.Airdashing       => AirdashAnimForDirection(),
-            PlayerState.Landing          => LandingAnim,
-            PlayerState.Hitstun          => HurtAnim,
-            PlayerState.AirHitstun       => player.Physics.VelocityY > 0 ? AirHurtRiseAnim : AirHurtFallAnim,
-            PlayerState.SoftKnockdown    => SoftKnockdownAnim,
-            PlayerState.Knockdown        => KnockdownAnim,
-            PlayerState.Wakeup           => WakeupAnim,
-            PlayerState.Blockstun        => BlockAnim,
-            PlayerState.CrouchBlockstun  => CrouchBlockAnim,
-            PlayerState.AirBlockstun     => AirBlockAnim,
-            _ => IdleAnim, // remaining states without a dedicated clip (grabs)
-        };
-    }
-
-    // Forward vs backward airdash based on the locked-in airdash direction (velocity is 0 on startup).
-    protected virtual string AirdashAnimForDirection()
-    {
-        bool forward = (player.GetFacing() == FacingDirection.Right && player.AirDashDirection > 0)
-                    || (player.GetFacing() == FacingDirection.Left  && player.AirDashDirection < 0);
-        return forward ? AirdashForwardAnim : AirdashBackAnim;
-    }
-
-    // Picks forward vs backward walk based on whether we're moving toward the opponent.
-    protected virtual string WalkAnimForDirection()
-    {
-        int vx = player.Physics.VelocityX;
-        if (Mathf.Abs(vx) < 1)
-            return WalkForwardAnim;
-
-        bool movingForward = (player.GetFacing() == FacingDirection.Right && vx > 0f)
-                          || (player.GetFacing() == FacingDirection.Left  && vx < 0f);
-        return movingForward ? WalkForwardAnim : WalkBackwardAnim;
-    }
-
-    // Plays the steady-state loop for the current state, cross-fading over BlendTime.
-    protected virtual void PlayLoop()
-    {
-        transitionTicksLeft = 0;
-        PlayClip(PickAnim());
-    }
-
-    // Plays a one-shot transition clip, arms the tick countdown for its length, and records the
-    // priority needed to cancel it early.
-    protected virtual void PlayTransition(string anim, int cancelThreshold)
-    {
-        PlayClip(anim);
-        Animation clip = animPlayer?.GetAnimation(anim);
-        float length = clip?.Length ?? 0f;
-        transitionTicksLeft = Mathf.Max(1, Mathf.CeilToInt(length / PlayerConstants.FixedDelta));
-        transitionCancelThreshold = cancelThreshold;
-    }
-
-    protected virtual void PlayClip(string anim, bool forceRestart = false, float? blendOverride = null)
-    {
-        if (animPlayer == null || string.IsNullOrEmpty(anim))
-            return;
-        if (currentAnim == anim && !forceRestart)
-            return; // already playing it, don't restart every frame
-        if (!animPlayer.HasAnimation(anim))
-            return; // clip not in the model; keep whatever is playing
-
-        // Hit/block reactions snap with no crossfade so frame 1 reads immediately.
-        float blend = blendOverride ?? (IsReactionState(player.CurrentState) ? 0f : BlendTime);
-        animPlayer.Play(anim, blend);
-        if (forceRestart || blend <= 0f)
-            animPlayer.Seek(0.0, true); // hard cut to the start of the clip
-        currentAnim = anim;
-    }
-
-    // Forces a clip to not loop (used for transition clips so they hold their last frame).
+    // Forces a clip to not loop (used for one-shot clips so they hold their last frame).
     protected virtual void ForceNoLoop(string anim)
     {
         if (animPlayer == null || string.IsNullOrEmpty(anim) || !animPlayer.HasAnimation(anim))

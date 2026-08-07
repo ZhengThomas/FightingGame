@@ -87,6 +87,9 @@ public struct PlayerSnapshot
     public ConsumedMarks Marks;
     public HitboxSlots Hitboxes;
     public int Health;
+    // Visual only — carried so a rollback restores the animation alongside the sim, but left out
+    // of SnapshotHash on purpose (see SnapshotHash).
+    public AnimatorState Anim;
 }
 
 // Whole-match snapshot for one tick — the unit that lives in MatchManager's rolling history
@@ -109,6 +112,10 @@ public struct Snapshot
 // EVERY field that steers the simulation has to be mixed in, in the same order on both sides. A
 // field left out here doesn't fail loudly; it just stops being checked, and a desync in it slips
 // through. Add to PlayerSnapshot above, add here.
+//
+// One deliberate exception: PlayerSnapshot.Anim. It's visual state, it never feeds back into the
+// sim, and machines don't need matching animations — including it would report a cosmetic animator
+// bug as a netcode desync.
 public static class SnapshotHash
 {
     const uint Seed = 2166136261;

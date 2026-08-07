@@ -69,7 +69,6 @@ public enum PlayerState
     Landing,
     Airdashing,
     GroundDashing,
-    GroundDashEnd,
     Backdashing,
     Crouching,
     StandAttacking,
@@ -204,6 +203,10 @@ public partial class Player : Node3D
     // copy captures every slot (a plain int[] would share the array reference across snapshots).
     HitHistoryBuffer hitHistory;
     int hitHistoryIndex = 0;
+    // Which clip is playing and how far into it. Stepped once per tick by StepAnimator; the
+    // PlayerAnimator node reads it and holds no timeline of its own.
+    AnimatorState anim;
+    public AnimatorState Anim => anim;
     FacingDirection lastFacing;
     int currentBufferWindow = PlayerConstants.BufferWindow; // depends on if were cancelling or not, our current state
 
@@ -336,6 +339,7 @@ public partial class Player : Node3D
         Marks = Marks,
         Hitboxes = hitboxes,
         Health = Health,
+        Anim = anim,
     };
 
     // Overwrite every sim-critical field on this Player from a PlayerSnapshot. Also blanks the
@@ -365,6 +369,7 @@ public partial class Player : Node3D
         Marks = s.Marks;
         hitboxes = s.Hitboxes;
         Health = s.Health;
+        anim = s.Anim;
     }
 
     public bool WasAlreadyHitBy(int attackId)
@@ -900,6 +905,10 @@ public partial class Player : Node3D
 
         return dashMacro || IsDoubleTap(backIsRight);
     }
+
+    // Advance the animation state machine. MatchManager calls this after collisions have resolved,
+    // so a hit landing this tick shows on the same frame rather than the next one.
+    public void StepAnimator() => anim = PlayerAnimFsm.Step(anim, this);
 
     public void Tick()
     {
