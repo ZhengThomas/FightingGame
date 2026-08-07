@@ -98,6 +98,121 @@ public struct Snapshot
     public PlayerSnapshot P2;
 }
 
+// Folds a whole Snapshot down to one number, so two machines running the same inputs can compare
+// results per frame and catch a divergence on the frame it happens.
+//
+// FNV-1a, 32-bit. Seed and Prime are the standard constants; the values themselves aren't special,
+// but both peers have to use the same ones. Fields are hashed individually rather than by copying
+// the struct's raw bytes, because the padding C# inserts between fields isn't guaranteed to hold
+// anything consistent — identical states could hash differently.
+//
+// EVERY field that steers the simulation has to be mixed in, in the same order on both sides. A
+// field left out here doesn't fail loudly; it just stops being checked, and a desync in it slips
+// through. Add to PlayerSnapshot above, add here.
+public static class SnapshotHash
+{
+    const uint Seed = 2166136261;
+    const uint Prime = 16777619;
+
+    static uint Mix(uint h, int value) => (h ^ (uint)value) * Prime;
+    static uint Mix(uint h, bool value) => Mix(h, value ? 1 : 0);
+
+    public static uint Of(Snapshot s) => MixPlayer(MixPlayer(MixMatch(Seed, s.Match), s.P1), s.P2);
+
+    static uint MixMatch(uint h, MatchSnapshot m)
+    {
+        h = Mix(h, m.FrameCount);
+        h = Mix(h, m.SimFrame);
+        h = Mix(h, m.HitPauseFramesRemaining);
+        h = Mix(h, m.P1xLastFrame);
+        h = Mix(h, m.P2xLastFrame);
+        h = Mix(h, m.FrontPlayerNumber);
+        return h;
+    }
+
+    static uint MixPlayer(uint h, PlayerSnapshot p)
+    {
+        h = Mix(h, p.SimX);
+        h = Mix(h, p.SimY);
+
+        h = Mix(h, p.Physics.VelocityX);
+        h = Mix(h, p.Physics.VelocityY);
+        h = Mix(h, p.Physics.PushbackVelocityX);
+        h = Mix(h, p.Physics.IsOnFloor);
+
+        h = Mix(h, (int)p.CurrentState);
+
+        h = Mix(h, p.Jump.JumpSquatFrame);
+        h = Mix(h, p.Jump.LandingFrame);
+        h = Mix(h, p.Jump.LandingDuration);
+        h = Mix(h, p.Jump.HasDoubleJump);
+        h = Mix(h, p.Jump.HasAirdash);
+        h = Mix(h, p.Jump.jumpDirection);
+        h = Mix(h, (int)p.Jump.CurrentJumpType);
+        h = Mix(h, p.Jump.AirdashFrame);
+        h = Mix(h, p.Jump.AirDashDirection);
+        h = Mix(h, p.Jump.FramesSinceLastJump);
+
+        h = Mix(h, p.CurrentMove.MoveDataId);
+        h = Mix(h, p.CurrentMove.InstanceId);
+        h = Mix(h, p.CurrentMove.Frame);
+        h = Mix(h, p.CurrentMove.HitLanded);
+        h = Mix(h, p.CurrentMove.Blocked);
+
+        h = Mix(h, p.BackdashInfo.BackDashFrame);
+        h = Mix(h, p.DashCooldown);
+        h = Mix(h, p.GroundDashFrame);
+
+        h = Mix(h, p.HitReaction.Timer.Frame);
+        h = Mix(h, p.HitReaction.Timer.Duration);
+        h = Mix(h, p.HitReaction.DamageScaleIndex);
+        h = Mix(h, p.HitReaction.HitstunScaleIndex);
+        h = Mix(h, p.HitReaction.GravityScale);
+        h = Mix(h, p.HitReaction.HardKnockdown);
+
+        h = Mix(h, p.BlockReaction.Timer.Frame);
+        h = Mix(h, p.BlockReaction.Timer.Duration);
+        h = Mix(h, p.GrabSequence.Timer.Frame);
+        h = Mix(h, p.GrabSequence.Timer.Duration);
+        h = Mix(h, p.GrabPartnerNumber);
+
+        h = Mix(h, p.SuppressGravity);
+        h = Mix(h, p.ReactionFlashId);
+
+        for (int i = 0; i < HitHistoryBuffer.Size; i++)
+            h = Mix(h, p.HitHistory[i]);
+        h = Mix(h, p.HitHistoryIndex);
+
+        h = Mix(h, (int)p.LastFacing);
+        h = Mix(h, p.CurrentBufferWindow);
+
+        h = Mix(h, p.Marks.Left);
+        h = Mix(h, p.Marks.Right);
+        h = Mix(h, p.Marks.Up);
+        h = Mix(h, p.Marks.Down);
+        h = Mix(h, p.Marks.Jump);
+        h = Mix(h, p.Marks.LightAttack);
+        h = Mix(h, p.Marks.MediumAttack);
+        h = Mix(h, p.Marks.HeavyAttack);
+        h = Mix(h, p.Marks.Dash);
+        h = Mix(h, p.Marks.Grab);
+
+        for (int i = 0; i < HitboxSlots.Size; i++)
+        {
+            HitboxInstance hb = p.Hitboxes[i];
+            h = Mix(h, hb.HitboxDataId);
+            h = Mix(h, hb.InstanceId);
+            h = Mix(h, hb.Frame);
+            h = Mix(h, hb.HitLanded);
+            h = Mix(h, hb.Blocked);
+            h = Mix(h, hb.FacingAtSpawn);
+        }
+
+        h = Mix(h, p.Health);
+        return h;
+    }
+}
+
 // Fixed 10-slot ring buffer of hit IDs, stored inline in a struct (C# 12 InlineArray) so a
 // struct copy snapshots its contents. Replaces the previous `int[]` field on Player, which
 // would have shared its backing array across snapshot copies.

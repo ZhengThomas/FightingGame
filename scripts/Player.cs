@@ -365,7 +365,6 @@ public partial class Player : Node3D
         Marks = s.Marks;
         hitboxes = s.Hitboxes;
         Health = s.Health;
-        SyncVisualPosition();
     }
 
     public bool WasAlreadyHitBy(int attackId)
@@ -557,7 +556,6 @@ public partial class Player : Node3D
         physics.VelocityX = 0;
         physics.VelocityY = 0;
         physics.PushbackVelocityX = 0;
-        SyncVisualPosition();
     }
 
     public void FlipFacing()
@@ -585,10 +583,7 @@ public partial class Player : Node3D
         int clampedDefenderX = Math.Clamp(desiredDefenderX, -wall, wall);
         int attackerShift = clampedDefenderX - desiredDefenderX;
         if (attackerShift != 0)
-        {
             SimX += attackerShift;
-            SyncVisualPosition();
-        }
 
         defender.SnapToSim(clampedDefenderX, desiredDefenderY);
         TransitionTo(PlayerState.GrabHit);
@@ -1716,7 +1711,6 @@ public partial class Player : Node3D
         // Velocities are physics units per frame; only divide when syncing the node for display.
         SimX += physics.VelocityX + physics.PushbackVelocityX;
         SimY += physics.VelocityY;
-        SyncVisualPosition();
     }
 
     protected virtual void ResolveFloorCollision()
@@ -1745,7 +1739,6 @@ public partial class Player : Node3D
                 }
             }
             physics.IsOnFloor = true;
-            SyncVisualPosition();
         }
         else
         {

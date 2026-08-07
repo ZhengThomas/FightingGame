@@ -75,6 +75,9 @@ public partial class MatchManager : Node
         return stateHistory[SlotFor(FrameCount - 1 - Math.Clamp(framesAgo, 0, oldest))];
     }
 
+    // One number hashing the recorded state `framesAgo` back. 
+    public uint StateChecksum(int framesAgo = 0) => SnapshotHash.Of(GetGameState(framesAgo));
+
     public (int attackerX, int defenderX) GetHistoricalSimX(Player attacker, Player defender, int framesAgo)
     {
         Snapshot state = GetGameState(framesAgo);
@@ -210,8 +213,6 @@ public partial class MatchManager : Node
 				Player1.SimX += push;
 				Player2.SimX -= push;
 			}
-			Player1.SyncVisualPosition();
-			Player2.SyncVisualPosition();
 		}
 
 		if (verticalOverlap)
@@ -222,8 +223,6 @@ public partial class MatchManager : Node
 			{
 				Player1.SimX = p1xLastFrame;
 				Player2.SimX = p2xLastFrame;
-				Player1.SyncVisualPosition();
-				Player2.SyncVisualPosition();
 			}
 		}
 	}
@@ -243,8 +242,6 @@ public partial class MatchManager : Node
 			int MidpointLastFrame = (p1xLastFrame + p2xLastFrame) / 2;
 			Player1.SimX = Math.Clamp(p1x, MidpointLastFrame - halfMax, MidpointLastFrame + halfMax);
 			Player2.SimX = Math.Clamp(p2x, MidpointLastFrame - halfMax, MidpointLastFrame + halfMax);
-			Player1.SyncVisualPosition();
-			Player2.SyncVisualPosition();
 		}
 
 		int wall = PlayerConstants.MaxDistanceFromCenter;
@@ -255,8 +252,6 @@ public partial class MatchManager : Node
 
 		Player1.SimX = Math.Clamp(Player1.SimX, -p1Walls, p1Walls);
 		Player2.SimX = Math.Clamp(Player2.SimX, -p2Walls, p2Walls);
-		Player1.SyncVisualPosition();
-		Player2.SyncVisualPosition();
 	}
 
 	private void TransferCornerPushback()
@@ -281,6 +276,14 @@ public partial class MatchManager : Node
 
 		attacker.AddPushbackVelocity(-pb);
 		defender.ClearPushbackVelocity();
+	}
+
+	// Push sim positions onto the Godot nodes. The sim never writes Node3D.Position itself, so a
+	// resim of N ticks costs one screen update instead of N. MatchDriver calls this once a frame.
+	public void SyncPresentation()
+	{
+		Player1?.SyncVisualPosition();
+		Player2?.SyncVisualPosition();
 	}
 
 	// Advance the simulation by exactly one tick. Safe to call multiple times in a row for rollback

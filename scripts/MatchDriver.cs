@@ -29,7 +29,8 @@ public partial class MatchDriver : Node
             match.Tick();
         }
 
-        // Runs whether or not the sim advanced, so boxes stay visible while frozen.
+        // Both run whether or not the sim advanced, so the view stays correct while frozen.
+        match.SyncPresentation();
         match.DrawDebugBoxes();
     }
 }
