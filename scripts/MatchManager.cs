@@ -87,6 +87,9 @@ public partial class MatchManager : Node
 	public int p1xLastFrame { get; private set; } = PlayerConstants.ToSim(-1.5f);
 	public int p2xLastFrame { get; private set; } = PlayerConstants.ToSim(1.5f);
 	int hitPauseFramesRemaining = 0;
+	// Per-frame record of whether the sim body was frozen. Not snapshotted — resim rewrites it.
+	readonly FrameRing<bool> hitPauseHistory = new FrameRing<bool>(InputManager.BufferSize);
+	public FrameRing<bool> HitPauseHistory => hitPauseHistory;
 	public const int DefaultHitstopDurationLight = 4;
 	public const int DefaultHitstopDurationMedium = 7;
 	public const int DefaultHitstopDurationHeavy = 9;
@@ -286,6 +289,9 @@ public partial class MatchManager : Node
 	// Advance the simulation by exactly one tick. Safe to call multiple times in a row for rollback
 	public void Tick()
 	{
+		// Written before the players tick so a query for the current frame reads it.
+		hitPauseHistory.Set(FrameCount, IsInHitPause);
+
 		if (!IsInHitPause)
 		{
 			TransferCornerPushback();

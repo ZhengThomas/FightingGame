@@ -1,3 +1,20 @@
+// Ring buffer of per-frame values indexed by absolute simulation tick number. The modulo handles
+// both the ring wrap (frame > Size) and negative "before tick 0" lookups, which read back as
+// default(T) — "no buttons pressed" for inputs, "not hit pause" for the freeze record.
+public class FrameRing<T>
+{
+    private readonly T[] slots;
+    public int Size => slots.Length;
+
+    public FrameRing(int size) { slots = new T[size]; }
+
+    public T Get(int frame) => slots[Index(frame)];
+    public void Set(int frame, T value) => slots[Index(frame)] = value;
+    public T this[int frame] => slots[Index(frame)];
+
+    private int Index(int frame) => ((frame % slots.Length) + slots.Length) % slots.Length;
+}
+
 // Per-player ring buffer of per-frame inputs, indexed by absolute simulation tick number.
 //
 // Writer model (scaffolded here for netplay; currently only the local case is used):
@@ -9,24 +26,14 @@
 //     (that's when to rollback). For now the class doesn't track that — the shape is right
 //     to layer it on later.
 //
-// The sim reads the log through InputView (Player.Inputs), which pairs a log reference with
-// the Consumed ring buffer (sim state, lives on Player) and the current tick number so that
-// queries like WasJustPressed can access both inputs and their consumed marks by "i frames ago"
-// while everything underneath is indexed by absolute frame number for rollback safety.
-public class InputLog
+// The sim reads the log through InputView (Player.Inputs), which pairs a log reference with the
+// ConsumedMarks (sim state, lives on Player), MatchManager's per-frame hit-pause record, and the
+// current tick number, so that queries like WasJustPressed can address inputs, their consumed
+// marks, and whether each tick was frozen by "i frames ago" while everything underneath is
+// indexed by absolute frame number for rollback safety.
+public class InputLog : FrameRing<InputFrame>
 {
-    private readonly InputFrame[] slots;
-    public int Size => slots.Length;
-
-    public InputLog(int size) { slots = new InputFrame[size]; }
-
-    // Absolute-tick read/write. The modulo handles both the ring wrap (frame > Size) and
-    // negative "before tick 0" lookups (default(InputFrame) reads as "no buttons pressed").
-    public InputFrame Get(int frame) => slots[Index(frame)];
-    public void Set(int frame, InputFrame input) => slots[Index(frame)] = input;
-    public InputFrame this[int frame] => slots[Index(frame)];
-
-    private int Index(int frame) => ((frame % slots.Length) + slots.Length) % slots.Length;
+    public InputLog(int size) : base(size) { }
 }
 
 // Sim-facing view over a Player's InputLog and ConsumedMarks, anchored at a specific tick.
@@ -37,6 +44,7 @@ public class InputLog
 public struct InputView
 {
     public InputLog Log;
+    public FrameRing<bool> HitPause;  // MatchManager's per-frame "the sim body was frozen" record
     public Player Owner;      // holds the ConsumedMarks that MarkConsumed writes through
     public int CurrentFrame;
 
@@ -44,6 +52,10 @@ public struct InputView
 
     // Input i frames before CurrentFrame (matches the old Buffer[i] semantics).
     public InputFrame this[int i] => Log[CurrentFrame - i];
+
+    // True if hit pause froze the sim body i frames back. Frozen ticks don't count against
+    // buffer windows.
+    public readonly bool WasHitPause(int i) => HitPause[CurrentFrame - i];
 
     // Read/write the "last consumed frame" for a specific button. Writes reach Owner.Marks
     // directly — Marks is a struct FIELD on Player (not a property) so struct-method mutation

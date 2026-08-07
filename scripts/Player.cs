@@ -159,10 +159,10 @@ public partial class Player : Node3D
     // becomes implicitly consumed too. Struct field (not property) so InputView.SetMarkFor can
     // mutate in place. Snapshots by struct copy along with the rest of Player state.
     public ConsumedMarks Marks;
-    // Sim-facing view constructed on demand — bundles the log, this Player (to reach Marks),
-    // and the current tick so extension methods can address inputs by "i frames ago" while
-    // everything underneath is absolute-frame-indexed.
-    public InputView Inputs => new InputView { Log = InputLog, Owner = this, CurrentFrame = Match.FrameCount };
+    // Sim-facing view constructed on demand — bundles the log, this Player (to reach Marks), the
+    // match's per-frame hit-pause record, and the current tick so extension methods can address
+    // inputs by "i frames ago" while everything underneath is absolute-frame-indexed.
+    public InputView Inputs => new InputView { Log = InputLog, HitPause = Match.HitPauseHistory, Owner = this, CurrentFrame = Match.FrameCount };
     public PhysicsState physics;
     // Sim-space position (PhysicsScale units). Source of truth for gameplay.
     public int SimX;

@@ -13,9 +13,7 @@ public struct InputFrame
     public bool MediumAttack;
     public bool HeavyAttack;
     public bool Dash;
-    // Inputs during hitpause are recorded but don't decrement the input buffer window
     public bool Grab;
-    public bool isDuringHitpause;
 }
 
 // Identifies a single button, used by query helpers (WasJustPressed, MarkConsumed, WasHeld) so
@@ -182,7 +180,8 @@ public static class InputQuery
             if (allPressedThisFrame && (i + 1 >= inputs.BufferSize || !InputHelpers.IsPressed(inputs[i + 1], button)))
                 return frame;
 
-            if (!frame.isDuringHitpause)
+            // Ticks the sim spent frozen don't burn buffer window.
+            if (!inputs.WasHitPause(i))
                 nonHitpauseFramesSeen++;
 
             i++;
@@ -243,7 +242,7 @@ public static class InputQuery
                 lastFoundFrame = i;
                 break;
             }
-            if (frame.isDuringHitpause)
+            if (inputs.WasHitPause(i))
             {
                 maxSearch++;
                 totalWindow++;
@@ -304,7 +303,7 @@ public static class InputQuery
             {
                 release = f;
             }
-            if (frame.isDuringHitpause)
+            if (inputs.WasHitPause(f))
             {
                 maxSearch++;
             }
@@ -500,7 +499,6 @@ public partial class InputManager : Node
             HeavyAttack  = Input.IsKeyPressed(bindings.HeavyAttack),
             Dash         = Input.IsKeyPressed(bindings.Dash),
             Grab         = Input.IsKeyPressed(bindings.Grab),
-            isDuringHitpause = match.IsInHitPause,
         };
 
         player.InputLog.Set(match.FrameCount, frame);
