@@ -261,6 +261,11 @@ public partial class PlayerAnimator : Node3D
             currentAnim = clip;
             if (a.Frame > 0 || blend <= 0f)
                 animPlayer.Seek(SeekTime(clip, a.Frame), true);
+            else
+                // Callback mode is Manual, so Play alone doesn't pose the skeleton — this applies
+                // frame 0 without moving time. Without it a fresh clip holds the previous pose for
+                // a frame, and the very first clip sits in the bind pose.
+                animPlayer.Advance(0.0);
         }
         else if (a.Frame > lastFrame)
         {

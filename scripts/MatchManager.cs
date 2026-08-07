@@ -94,7 +94,10 @@ public partial class MatchManager : Node
     public int FrameCount { get; private set; } = 0;
     // Sim-progress tick number. Advances only on frames non hit puase frames
     public int SimFrame { get; private set; } = 0;
-	public DebugDraw DebugDraw { get; private set; }
+	DebugDraw debugDraw;
+	// Resolved on first use rather than in _Ready: this is an autoload, so the main scene it lives
+	// in hasn't been added to the tree yet when _Ready runs.
+	public DebugDraw DebugDraw => debugDraw ??= GetNodeOrNull<DebugDraw>("/root/ActualFighting/DebugLayer/DebugDraw");
 	public int p1xLastFrame { get; private set; } = PlayerConstants.ToSim(-1.5f);
 	public int p2xLastFrame { get; private set; } = PlayerConstants.ToSim(1.5f);
 	int hitPauseFramesRemaining = 0;
@@ -117,11 +120,6 @@ public partial class MatchManager : Node
 	// starts an attack so the attacker — and its slash VFX — draw over the opponent, GGST-style,
 	// even before the hit connects.
 	public void BringToFront(Player player) => frontPlayerNumber = player?.PlayerNumber ?? 0;
-
-    public override void _Ready()
-    {
-        DebugDraw = GetNode<DebugDraw>("/root/ActualFighting/DebugLayer/DebugDraw");
-    }
 
 	public void TriggerHitPause(int duration, MoveType strength)
 	{
