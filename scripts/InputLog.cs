@@ -17,23 +17,48 @@ public class FrameRing<T>
 
 // Per-player ring buffer of per-frame inputs, indexed by absolute simulation tick number.
 //
-// Writer model (scaffolded here for netplay; currently only the local case is used):
+// Writer model:
 //   - LOCAL player: InputManager polls the keyboard once per real physics frame and calls
-//     Set(FrameCount, live-keys). This is the sole place `Input.IsKeyPressed` is called.
-//   - REMOTE player (future): a NetworkManager will call Set(N, confirmedInput) as inputs
-//     arrive from the peer, and Set(N, predictedInput) for frames that haven't arrived yet.
-//     A per-slot confirmed/predicted flag can be added when we need to detect mispredictions
-//     (that's when to rollback). For now the class doesn't track that — the shape is right
-//     to layer it on later.
+//     SetConfirmed(FrameCount, live-keys). This is the sole place `Input.IsKeyPressed` is called.
+//   - REMOTE player (not wired up yet): a NetworkManager calls SetConfirmed(N, input) as inputs
+//     arrive from the peer, and SetPredicted(N, guess) for frames that haven't arrived. A
+//     confirmed input replacing a prediction that disagreed is what triggers a rollback.
 //
 // The sim reads the log through InputView (Player.Inputs), which pairs a log reference with the
 // ConsumedMarks (sim state, lives on Player), MatchManager's per-frame hit-pause record, and the
 // current tick number, so that queries like WasJustPressed can address inputs, their consumed
 // marks, and whether each tick was frozen by "i frames ago" while everything underneath is
 // indexed by absolute frame number for rollback safety.
-public class InputLog : FrameRing<InputFrame>
+// One recorded input, plus whether it actually happened or was guessed. Online the opponent's
+// inputs arrive a few frames late, so the gap gets filled with a prediction (normally "still
+// holding what they last held") and corrected once the real one shows up.
+public struct LoggedInput
+{
+    public InputFrame Input;
+    public bool Confirmed;
+}
+
+public class InputLog : FrameRing<LoggedInput>
 {
     public InputLog(int size) : base(size) { }
+
+    // Newest frame a real input has been recorded for; anything past it is a guess. Also the
+    // furthest back a correction can ever force a rollback. -1 = nothing received yet.
+    public int LastConfirmedFrame { get; private set; } = -1;
+
+    // A real input — the local keyboard, or one that arrived from the peer.
+    public void SetConfirmed(int frame, InputFrame input)
+    {
+        Set(frame, new LoggedInput { Input = input, Confirmed = true });
+        if (frame > LastConfirmedFrame) LastConfirmedFrame = frame;
+    }
+
+    // A guess, standing in until the real input arrives.
+    public void SetPredicted(int frame, InputFrame input)
+        => Set(frame, new LoggedInput { Input = input, Confirmed = false });
+
+    public InputFrame InputAt(int frame) => this[frame].Input;
+    public bool IsConfirmed(int frame) => this[frame].Confirmed;
 }
 
 // Sim-facing view over a Player's InputLog and ConsumedMarks, anchored at a specific tick.
@@ -50,8 +75,10 @@ public struct InputView
 
     public int BufferSize => Log.Size;
 
-    // Input i frames before CurrentFrame (matches the old Buffer[i] semantics).
-    public InputFrame this[int i] => Log[CurrentFrame - i];
+    // Input i frames before CurrentFrame (matches the old Buffer[i] semantics). The sim reads
+    // inputs the same way whether they were confirmed or predicted — sorting that out is the
+    // network layer's job, not the simulation's.
+    public InputFrame this[int i] => Log.InputAt(CurrentFrame - i);
 
     // True if hit pause froze the sim body i frames back. Frozen ticks don't count against
     // buffer windows.

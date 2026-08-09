@@ -27,6 +27,9 @@ public enum Button
 
 public static class InputHelpers
 {
+    // Number of Button enum values. Doubles as the bit width used by InputCodec.
+    public const int ButtonCount = 10;
+
     public static bool IsPressed(InputFrame f, Button b) => b switch
     {
         Button.Left         => f.Left,
@@ -41,6 +44,45 @@ public static class InputHelpers
         Button.Grab         => f.Grab,
         _ => false,
     };
+
+    public static void Set(ref InputFrame f, Button b, bool pressed)
+    {
+        switch (b)
+        {
+            case Button.Left:         f.Left = pressed; break;
+            case Button.Right:        f.Right = pressed; break;
+            case Button.Up:           f.Up = pressed; break;
+            case Button.Down:         f.Down = pressed; break;
+            case Button.Jump:         f.Jump = pressed; break;
+            case Button.LightAttack:  f.LightAttack = pressed; break;
+            case Button.MediumAttack: f.MediumAttack = pressed; break;
+            case Button.HeavyAttack:  f.HeavyAttack = pressed; break;
+            case Button.Dash:         f.Dash = pressed; break;
+            case Button.Grab:         f.Grab = pressed; break;
+        }
+    }
+}
+
+// Turns an input into a number, so we can send it over the internet. One bit in
+// the number represents the button press of one button, in order of the struct
+public static class InputCodec
+{
+    public static ushort Pack(InputFrame f)
+    {
+        ushort bits = 0;
+        for (int i = 0; i < InputHelpers.ButtonCount; i++)
+            if (InputHelpers.IsPressed(f, (Button)i))
+                bits |= (ushort)(1 << i);
+        return bits;
+    }
+
+    public static InputFrame Unpack(ushort bits)
+    {
+        InputFrame f = default;
+        for (int i = 0; i < InputHelpers.ButtonCount; i++)
+            InputHelpers.Set(ref f, (Button)i, (bits & (1 << i)) != 0);
+        return f;
+    }
 }
 
 // Per-button table that tells you when a input was last consumed
@@ -457,12 +499,17 @@ public partial class InputManager : Node
         match = GetNode<MatchManager>("/root/MatchManager");
     }
 
-    // Record both players' inputs under `frame`. MatchDriver calls this immediately before the
-    // tick that consumes them.
+    // This machine reads inputs for what players? Online its online one of the players,
+    // Locally its both of the players. 
+    public bool OwnsPlayer1 { get; set; } = true;
+    public bool OwnsPlayer2 { get; set; } = true;
+
+    // Record the locally-owned players' inputs under `frame`. MatchDriver calls this immediately
+    // before the tick that consumes them.
     public void PollLocalInputs(int frame)
     {
-        ReadPlayerInput(match.Player1, P1Bindings, frame);
-        ReadPlayerInput(match.Player2, P2Bindings, frame);
+        if (OwnsPlayer1) ReadPlayerInput(match.Player1, P1Bindings, frame);
+        if (OwnsPlayer2) ReadPlayerInput(match.Player2, P2Bindings, frame);
     }
 
     // Read live keyboard for this local player and record the frame into the durable per-tick
@@ -470,9 +517,8 @@ public partial class InputManager : Node
     // InputView, which addresses the log by absolute frame — any re-simulation of a past tick
     // reads the same input back from the same slot.
     //
-    // When a networked "remote" player exists later, its input source will be a NetworkManager
-    // that calls player.InputLog.Set(...) from received packets instead of this method — same
-    // shape, different writer.
+    // A remote player's inputs come from a NetworkManager calling SetConfirmed / SetPredicted on
+    // their log instead of this method 
     private void ReadPlayerInput(Player player, InputBindings bindings, int frame)
     {
         if (player == null) return;
@@ -500,6 +546,7 @@ public partial class InputManager : Node
             Grab         = Input.IsKeyPressed(bindings.Grab),
         };
 
-        player.InputLog.Set(frame, input);
+        // Locally read, so it's real by definition — never a prediction.
+        player.InputLog.SetConfirmed(frame, input);
     }
 }
