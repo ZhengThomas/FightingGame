@@ -512,17 +512,26 @@ public partial class InputManager : Node
         if (OwnsPlayer2) ReadPlayerInput(match.Player2, P2Bindings, frame);
     }
 
-    // Read live keyboard for this local player and record the frame into the durable per-tick
-    // log. This is the ONLY place `Input.IsKeyPressed` is called. The sim reads through
-    // InputView, which addresses the log by absolute frame — any re-simulation of a past tick
-    // reads the same input back from the same slot.
+    // Read a player's keys without recording them. This is used with simulated netplay
+    public InputFrame ReadInputFor(int playerNumber)
+        => ReadBindings(playerNumber == 1 ? P1Bindings : P2Bindings);
+
+    // Read live keyboard for this local player and record it into the durable per-tick log. The
+    // sim reads through InputView, which addresses the log by absolute frame — any re-simulation
+    // of a past tick reads the same input back from the same slot.
     //
     // A remote player's inputs come from a NetworkManager calling SetConfirmed / SetPredicted on
-    // their log instead of this method 
+    // their log instead of this method.
     private void ReadPlayerInput(Player player, InputBindings bindings, int frame)
     {
         if (player == null) return;
+        // Locally read, so it's real by definition — never a prediction.
+        player.InputLog.SetConfirmed(frame, ReadBindings(bindings));
+    }
 
+    // The only place `Input.IsKeyPressed` is called.
+    private static InputFrame ReadBindings(InputBindings bindings)
+    {
         bool left  = Input.IsKeyPressed(bindings.Left);
         bool right = Input.IsKeyPressed(bindings.Right);
         bool up    = Input.IsKeyPressed(bindings.Up);
@@ -532,7 +541,7 @@ public partial class InputManager : Node
         if (left && right) { left = false; right = false; }
         if (up && down)    { up   = false; down  = false; }
 
-        InputFrame input = new InputFrame
+        return new InputFrame
         {
             Left         = left,
             Right        = right,
@@ -545,8 +554,5 @@ public partial class InputManager : Node
             Dash         = Input.IsKeyPressed(bindings.Dash),
             Grab         = Input.IsKeyPressed(bindings.Grab),
         };
-
-        // Locally read, so it's real by definition — never a prediction.
-        player.InputLog.SetConfirmed(frame, input);
     }
 }

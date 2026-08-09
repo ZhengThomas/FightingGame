@@ -42,20 +42,28 @@ public class InputLog : FrameRing<LoggedInput>
 {
     public InputLog(int size) : base(size) { }
 
-    // Newest frame a real input has been recorded for; anything past it is a guess. Also the
-    // furthest back a correction can ever force a rollback. -1 = nothing received yet.
+    // Highest frame written at all, confirmed or guessed.
+    public int NewestFrame { get; private set; } = -1;
+
+    // Highest frame where everything up to and including it is confirmed. -1 = nothing received yet.
     public int LastConfirmedFrame { get; private set; } = -1;
 
     // A real input — the local keyboard, or one that arrived from the peer.
     public void SetConfirmed(int frame, InputFrame input)
     {
         Set(frame, new LoggedInput { Input = input, Confirmed = true });
-        if (frame > LastConfirmedFrame) LastConfirmedFrame = frame;
+        if (frame > NewestFrame) NewestFrame = frame;
+        // Bounded by NewestFrame so this can't walk into stale slots the ring hasn't overwritten.
+        while (LastConfirmedFrame < NewestFrame && IsConfirmed(LastConfirmedFrame + 1))
+            LastConfirmedFrame++;
     }
 
     // A guess, standing in until the real input arrives.
     public void SetPredicted(int frame, InputFrame input)
-        => Set(frame, new LoggedInput { Input = input, Confirmed = false });
+    {
+        Set(frame, new LoggedInput { Input = input, Confirmed = false });
+        if (frame > NewestFrame) NewestFrame = frame;
+    }
 
     public InputFrame InputAt(int frame) => this[frame].Input;
     public bool IsConfirmed(int frame) => this[frame].Confirmed;

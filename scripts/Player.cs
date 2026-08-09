@@ -194,7 +194,7 @@ public partial class Player : Node3D
     int reactionFlashId;
 
     List<Move> moveList;
-    public Box Pushbox = new Box { X = 0, Y = 7000, Width = 3000, Height = 9000 };
+    public Box Pushbox = new Box { X = 0, Y = 8000, Width = 3000, Height = 8000 };
     static readonly List<Box> StandingHurtbox = new List<Box>{ new Box { X = 0, Y = 10000, Width = 5000, Height = 10000 } };
     static readonly List<Box> CrouchingHurtbox = new List<Box>{new Box { X = 0, Y = 5000, Width = 5000, Height = 7500 }};
     static readonly List<Box> AirborneHurtbox = new List<Box>{new Box { X = 0, Y = 10000, Width = 5000, Height = 10000 }};
