@@ -1,3 +1,4 @@
+using System;
 using Godot;
 
 // Owns the order of operations for one real frame: collect this tick's inputs, advance the sim,
@@ -18,13 +19,18 @@ public partial class MatchDriver : Node
     // go through FakeNetwork and only reach the log once "delivered".
     public bool SimulateNetplay = true;
 
-    // Input delta Needs to be >= FakeLatencyTicks + FakeJitterTicks or the game will
+    // Inputdelay Needs to be >= FakeLatencyTicks + FakeJitterTicks or the game will
     // constantly have to stall Set it lower on purpose to watch that happen; rollback is what
     // eventually lets it come down.
-    public int InputDelay = 8;
-    public int FakeLatencyTicks = 6;   // ~100ms at 60fps
+    public int InputDelay = 4;
+    public int rollbackFrames = 4;
+    public int FakeLatencyTicks = 6;   
     public int FakeJitterTicks = 2;
-    public int FakeDropPercent = 30;
+    public int FakeDropPercent = 5;
+
+    // Frame that was mispredicted and we need to commit a rollback to.
+    // -1 means nothing is wrong
+    int rollbackTo = -1;
 
     FakeNetwork fakeNet;
     // Advances every real frame, including stalled ones — delivery happens in wall time, not sim
@@ -59,9 +65,24 @@ public partial class MatchDriver : Node
                 inputManager.PollLocalInputs(match.FrameCount);
             }
 
+            // Guess the next few inputs of the opponent based on waht theyre doing
+            RefreshPredictions();
+
+            // Theres a difference between our prediction and the actual, so we resim
+            if(rollbackTo != -1)
+            {
+                int target = match.FrameCount;
+                match.RestoreSnapshot(match.GetGameState(target - rollbackTo));
+                // Restoring puts FrameCount back to rollbackTo; tick until we've caught up again.
+                while (match.FrameCount < target)
+                    match.Tick();
+
+                rollbackTo = -1;
+            }
+
             // if an input for this frame hasn't arrived, don't advance. Both sides do the same,
             // so they stall together and stay in step.
-            if (!SimulateNetplay || HaveConfirmedInputs(match.FrameCount))
+            if (!SimulateNetplay || HaveConfirmedInputs(match.FrameCount - rollbackFrames))
             {
                 match.Tick();
 
@@ -100,8 +121,18 @@ public partial class MatchDriver : Node
         if (match.Player2 != null)
         {
             fakeNet.Send(inputFrame, inputManager.ReadInputFor(2), netTick);
-            foreach ((int frame, InputFrame input) in fakeNet.Receive(netTick))
+            foreach ((int frame, InputFrame input) in fakeNet.Receive(netTick)){
+                // If the input we received is not the same as what weve predicted
+                var predicted = match.Player2.InputLog.InputAt(frame);
+                if(frame < match.FrameCount && !match.Player2.InputLog.IsConfirmed(frame) && InputCodec.Pack(input) != InputCodec.Pack(predicted))
+                {
+                    // Corrections don't arrive in order, so keep the earliest — that's how far
+                    // back the replay has to start.
+                    rollbackTo = rollbackTo == -1 ? frame : Math.Min(rollbackTo, frame);
+                }
+
                 match.Player2.InputLog.SetConfirmed(frame, input);
+            }
             // Tell the sender how far we've got, so it stops resending what landed and keeps
             // resending what didn't. Without this a long enough burst of drops would strand a
             // frame forever and the game would wait on it for good.
@@ -122,6 +153,24 @@ public partial class MatchDriver : Node
             match.Player2.InputLog.SetConfirmed(f, default);
         }
         primed = true;
+    }
+
+    // Fill in guesses for every opponent frame that hasn't arrived, up to the one we're about to
+    // tick. The guess is "they're still doing whatever they last actually did" — right more often
+    // than it sounds, since people hold directions and buttons for several frames at a time.
+    //
+    // Rerun every frame rather than only for the newest one: once a correction lands,
+    // LastConfirmedFrame moves and every guess past it needs re-basing on the newer input.
+    void RefreshPredictions()
+    {
+        if (!SimulateNetplay || match.Player2 == null) return;
+
+        InputLog log = match.Player2.InputLog;
+        if (log.LastConfirmedFrame < 0) return;
+
+        InputFrame guess = log.InputAt(log.LastConfirmedFrame);
+        for (int f = log.LastConfirmedFrame + 1; f <= match.FrameCount; f++)
+            log.SetPredicted(f, guess);
     }
 
     // True once both players' inputs for `frame` have actually arrived.
