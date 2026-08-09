@@ -20,6 +20,10 @@ public partial class MatchDriver : Node
         match = GetNode<MatchManager>("/root/MatchManager");
     }
 
+    // How many ticks the self-test rewinds and replays. Small enough to be cheap, long enough to
+    // cross a hit or a state change.
+    const int RollbackTestDepth = 15;
+
     public override void _PhysicsProcess(double delta)
     {
         if (debug.ConsumeShouldTick())
@@ -27,10 +31,42 @@ public partial class MatchDriver : Node
             // Inputs are recorded under the frame the tick is about to consume.
             inputManager.PollLocalInputs(match.FrameCount);
             match.Tick();
+
+            if (debug.RollbackTestEnabled)
+                RunRollbackSelfTest();
         }
 
         // Both run whether or not the sim advanced, so the view stays correct while frozen.
         match.SyncPresentation();
         match.DrawDebugBoxes();
+    }
+
+    // Rewinds a few ticks and replays them with the inputs already in the log, then checks the
+    // result is identical.
+    //
+    // Passing is invisible: the replay lands on the state the game was already in.
+    void RunRollbackSelfTest()
+    {
+        if (!match.HasGameState(RollbackTestDepth)) return; // not enough history yet
+
+        int frame = match.FrameCount;
+        uint expected = match.StateChecksum();
+        Snapshot before = match.CaptureSnapshot();
+
+        match.RestoreSnapshot(match.GetGameState(RollbackTestDepth));
+        for (int i = 0; i < RollbackTestDepth; i++)
+            match.Tick();
+
+        uint actual = match.StateChecksum();
+        if (actual == expected) return;
+
+        GD.PushError(
+            $"Rollback self-test failed: replaying frames {frame - RollbackTestDepth}-{frame - 1} "
+            + $"gave {actual:X8}, expected {expected:X8}. Some sim state isn't in the snapshot. "
+            + "Test disabled — press the toggle again to re-arm.");
+
+        // Put the game back where it was so a failure doesn't derail the session.
+        match.RestoreSnapshot(before);
+        debug.DisableRollbackTest();
     }
 }

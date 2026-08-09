@@ -923,6 +923,7 @@ public partial class Player : Node3D
         ApplyVelocity();
         ResolveFloorCollision();
 
+        /*
         if (Inputs.WasMotion(GetFacing() == FacingDirection.Right, MotionInputs.QCF))
         {
             GD.Print("QCF");
@@ -951,6 +952,7 @@ public partial class Player : Node3D
         {
             GD.Print("DownUp");
         }
+        */
     }
 
     protected virtual void ApplyGravity()

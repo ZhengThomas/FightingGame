@@ -368,7 +368,7 @@ public partial class MatchManager : Node
 					}
 					else
 					{
-						GD.Print($"{attacker.PlayerNumber} hit {defender.PlayerNumber}!");
+						//GD.Print($"{attacker.PlayerNumber} hit {defender.PlayerNumber}!");
 						bool blocked = defender.TakeHit(hbData, hb.InstanceId, attackDir, attacker);
 						attacker.RegisterHitboxLanded(hb.InstanceId, blocked);
 						attacker.MarkCurrentMoveLanded(blocked);
