@@ -8,19 +8,21 @@ using Godot;
 // replay is catching up. The connection itself lives in NetplaySession; this only asks what it
 // knows and acts on the answer.
 //
-// It doesn't decide how the match is connected — StartMatch is told. That call comes from whatever
-// screen ran before the fighting scene, so a lobby can hand over a Steam connection the same way
-// the menu hands over a loopback one.
+// It doesn't decide how the match is connected — whoever loads this scene fills in Setup first, so
+// a lobby can hand over a Steam connection the same way the menu hands over a loopback one. Left
+// alone it's a local match on one keyboard, which is what running the scene from the editor gets.
 public partial class MatchDriver : Node
 {
+    // Written by the previous screen after instantiating the fighting scene but before adding it to
+    // the tree, so it's in place by the time _Ready runs.
+    public MatchSetup Setup;
+
     DebugManager debug;
     InputManager inputManager;
     MatchManager match;
 
     // Null when both players share this keyboard.
     NetplaySession session;
-    // False until StartMatch. Nothing ticks before then, so the menu can sit there.
-    bool matchRunning;
     int stalledFrames;
 
     // How many ticks the self-test rewinds and replays. Small enough to be cheap, long enough to
@@ -30,34 +32,19 @@ public partial class MatchDriver : Node
     public override void _Ready()
     {
         debug = GetNode<DebugManager>("/root/DebugManager");
-        inputManager = GetNode<InputManager>("/root/InputManager");
-        match = GetNode<MatchManager>("/root/MatchManager");
+        match = MatchManager.Current;
+        inputManager = new InputManager(match);
+
+        if (Setup.Transport != null)
+            session = new NetplaySession(match, inputManager, Setup.Transport,
+                                         Setup.InputDelay, Setup.RollbackFrames);
     }
 
+    // Leaving the scene ends the match, so the connection goes with it.
     public override void _ExitTree() => session?.Shutdown();
-
-    // Set up the next match. Call before swapping in the fighting scene — players register as that
-    // scene loads, and ticking starts as soon as they do.
-    public void StartMatch(MatchSetup setup)
-    {
-        session = setup.Transport == null
-            ? null
-            : new NetplaySession(match, inputManager, setup.Transport,
-                                 setup.InputDelay, setup.RollbackFrames);
-        stalledFrames = 0;
-        matchRunning = true;
-    }
 
     public override void _PhysicsProcess(double delta)
     {
-        if (!matchRunning)
-        {
-            // Nobody set a match up, so this is a scene run straight from the editor rather than
-            // reached through the menu. Give it a local one once its players exist.
-            if (match.Player1 == null) return;
-            StartMatch(default);
-        }
-
         if (debug.ConsumeShouldTick())
         {
             if (session != null)

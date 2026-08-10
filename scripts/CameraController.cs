@@ -15,13 +15,13 @@ public partial class CameraController : Camera3D
 
     public override void _Ready()
     {
-        match = GetNode<MatchManager>("/root/MatchManager");
+        match = MatchManager.Current;
         Position = new Vector3(0, BaseY, Position.Z);
     }
 
     public override void _Process(double delta)
     {
-        if (match.Player1 == null || match.Player2 == null) return;
+        if (match == null || match.Player1 == null || match.Player2 == null) return;
 
         Vector3 target = CalculateTargetPosition();
         Position = Position.Lerp(target, TrackSpeed * (float)delta);

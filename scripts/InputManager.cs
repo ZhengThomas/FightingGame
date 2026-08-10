@@ -462,7 +462,9 @@ public static class ChargeInputs
     };
 }
 
-public partial class InputManager : Node
+// Reads the keyboard and records it into the players' input logs. Not a Node — it has no tree
+// presence and nothing to process; MatchDriver makes one per match.
+public class InputManager
 {
     public const int BufferSize = 60;
 
@@ -492,12 +494,9 @@ public partial class InputManager : Node
         Grab = Key.L,
     };
 
-    MatchManager match;
+    readonly MatchManager match;
 
-    public override void _Ready()
-    {
-        match = GetNode<MatchManager>("/root/MatchManager");
-    }
+    public InputManager(MatchManager match) { this.match = match; }
 
     // This machine reads inputs for what players? Online its online one of the players,
     // Locally its both of the players. 
@@ -513,7 +512,7 @@ public partial class InputManager : Node
     }
 
     // Read a player's keys without recording them. This is used with simulated netplay
-    public InputFrame ReadInputFor(int playerNumber)
+    public static InputFrame ReadInputFor(int playerNumber)
         => ReadBindings(playerNumber == 1 ? P1Bindings : P2Bindings);
 
     // Read live keyboard for this local player and record it into the durable per-tick log. The

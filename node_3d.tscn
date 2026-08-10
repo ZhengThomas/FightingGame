@@ -8,6 +8,8 @@
 [ext_resource type="PackedScene" uid="uid://lfpeewpqnrfk" path="res://player.tscn" id="4_jka67"]
 [ext_resource type="Script" uid="uid://d0brfe7tnn8dw" path="res://scripts/DebugDraw.cs" id="4_wc5p8"]
 [ext_resource type="Script" uid="uid://biypgpgpadelt" path="res://scripts/HealthBarHud.cs" id="5_4arys"]
+[ext_resource type="Script" uid="uid://fn2tqsh65fm8" path="res://scripts/MatchManager.cs" id="6_match"]
+[ext_resource type="Script" uid="uid://q3igickf8y0f" path="res://scripts/MatchDriver.cs" id="7_driver"]
 
 [sub_resource type="Environment" id="Environment_s68cd"]
 
@@ -147,7 +149,8 @@ transform = Transform3D(-4.371139e-08, -1, 0, 1, -4.371139e-08, 0, 0, 0, 1, -10,
 size = Vector3(10, 0.5, 15)
 material = SubResource("ShaderMaterial_8h4pb")
 
-[node name="MatchManager" type="Node3D" parent="." unique_id=1815988755]
+[node name="MatchManager" type="Node" parent="." unique_id=1815988755]
+script = ExtResource("6_match")
 
 [node name="Player" parent="MatchManager" unique_id=500866665 instance=ExtResource("4_jka67")]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -1.5, -0.8, 0)
@@ -155,6 +158,9 @@ transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -1.5, -0.8, 0)
 [node name="Player2" parent="MatchManager" unique_id=1229671468 instance=ExtResource("4_jka67")]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 1.5, -0.8, 0)
 PlayerNumber = 2
+
+[node name="MatchDriver" type="Node" parent="." unique_id=1815988756]
+script = ExtResource("7_driver")
 
 [node name="DebugLayer" type="CanvasLayer" parent="." unique_id=273675407]
 

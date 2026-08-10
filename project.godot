@@ -17,10 +17,7 @@ config/icon="res://icon.svg"
 
 [autoload]
 
-InputManager="*uid://c2dhxcmnfffq0"
-MatchManager="*uid://fn2tqsh65fm8"
 DebugManager="*uid://dalfe5c2fhi30"
-MatchDriver="*res://scripts/MatchDriver.cs"
 
 [dotnet]
 

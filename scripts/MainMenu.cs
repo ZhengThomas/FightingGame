@@ -35,16 +35,21 @@ public partial class MainMenu : Control
         local.GrabFocus();
     }
 
+    // Built by hand rather than with ChangeSceneToFile so the setup is in place before anything in
+    // the fighting scene runs — the players register with MatchManager as it's added to the tree.
     void Begin(IInputTransport transport)
     {
-        GetNode<MatchDriver>("/root/MatchDriver").StartMatch(new MatchSetup
+        Node match = GD.Load<PackedScene>(MatchScene).Instantiate();
+        match.GetNode<MatchDriver>("MatchDriver").Setup = new MatchSetup
         {
             Transport = transport,
             InputDelay = InputDelay,
             RollbackFrames = RollbackFrames,
-        });
+        };
 
-        GetTree().ChangeSceneToFile(MatchScene);
+        GetTree().Root.AddChild(match);
+        GetTree().CurrentScene = match;
+        QueueFree();
     }
 
     // Another copy of the game on this machine, over loopback. Run two instances and press this in
@@ -59,7 +64,6 @@ public partial class MainMenu : Control
     // No second copy — the opponent is the other set of keys on this keyboard, delivered late.
     IInputTransport MakeFakeTransport()
     {
-        var inputManager = GetNode<InputManager>("/root/InputManager");
         var fake = new FakeNetwork(seed: 12345)
         {
             LocalPlayerNumber = FakeLocalPlayer,
@@ -67,7 +71,7 @@ public partial class MainMenu : Control
             JitterTicks = FakeJitterTicks,
             DropPercent = FakeDropPercent,
         };
-        fake.PeerInputSource = _ => inputManager.ReadInputFor(FakeLocalPlayer == 1 ? 2 : 1);
+        fake.PeerInputSource = _ => InputManager.ReadInputFor(FakeLocalPlayer == 1 ? 2 : 1);
         return fake;
     }
 }

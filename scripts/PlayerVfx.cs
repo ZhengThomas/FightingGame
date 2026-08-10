@@ -35,7 +35,7 @@ public partial class PlayerVfx : Node3D
     public override void _Ready()
     {
         player = GetParent<Player>();
-        matchManager = GetNodeOrNull<MatchManager>("/root/MatchManager");
+        matchManager = MatchManager.Current;
         if (player == null)
         {
             GD.PushWarning("PlayerVfx: parent is not a Player node.");

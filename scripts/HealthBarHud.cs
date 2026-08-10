@@ -41,7 +41,7 @@ public partial class HealthBarHud : Node3D
 
     public override void _Ready()
     {
-        match = GetNode<MatchManager>("/root/MatchManager");
+        match = MatchManager.Current;
         bars = new[]
         {
             MakeBar(P1Fill, P1Trail, P1, shrinkFromRight: false),

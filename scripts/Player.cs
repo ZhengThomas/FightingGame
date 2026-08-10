@@ -221,8 +221,9 @@ public partial class Player : Node3D
         InputLog = new InputLog(InputManager.BufferSize);
         Marks = ConsumedMarks.Empty;
 
-        Match = GetNode<MatchManager>("/root/MatchManager");
-        Match.RegisterPlayer(this, PlayerNumber);
+        // Null in scenes with no match running, like the hitbox lab — nothing ticks there.
+        Match = MatchManager.Current;
+        Match?.RegisterPlayer(this, PlayerNumber);
 
         // Scene placement is in world floats; bake into sim ints once.
         SimX = PlayerConstants.ToSim(Position.X);

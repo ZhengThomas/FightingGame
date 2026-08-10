@@ -5,6 +5,20 @@ using System.Diagnostics;
 
 public partial class MatchManager : Node
 {
+    // The match currently in the tree, or null between matches. Set on entering rather than in
+    // _Ready so everything else in the scene can find it during their own _Ready.
+    //
+    // Lives and dies with the fighting scene, so nothing here survives into a menu — loading the
+    // scene again is what starts a fresh match.
+    public static MatchManager Current { get; private set; }
+
+    public override void _EnterTree() => Current = this;
+
+    public override void _ExitTree()
+    {
+        if (Current == this) Current = null;
+    }
+
     public const int StateHistorySize = 60;
     Snapshot[] stateHistory = new Snapshot[StateHistorySize];
 
@@ -95,9 +109,9 @@ public partial class MatchManager : Node
     // Sim-progress tick number. Advances only on frames non hit puase frames
     public int SimFrame { get; private set; } = 0;
 	DebugDraw debugDraw;
-	// Resolved on first use rather than in _Ready: this is an autoload, so the main scene it lives
-	// in hasn't been added to the tree yet when _Ready runs.
-	public DebugDraw DebugDraw => debugDraw ??= GetNodeOrNull<DebugDraw>("/root/ActualFighting/DebugLayer/DebugDraw");
+	// Sibling of this node in the fighting scene. Resolved on first use so a scene without a debug
+	// layer just draws nothing.
+	public DebugDraw DebugDraw => debugDraw ??= GetNodeOrNull<DebugDraw>("../DebugLayer/DebugDraw");
 	public int p1xLastFrame { get; private set; } = PlayerConstants.ToSim(-1.5f);
 	public int p2xLastFrame { get; private set; } = PlayerConstants.ToSim(1.5f);
 	int hitPauseFramesRemaining = 0;
