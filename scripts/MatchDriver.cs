@@ -28,10 +28,10 @@ public partial class MatchDriver : Node
     // responsiveness on every input, RollbackFrames costs nothing until a guess is wrong — so bias
     // toward a small delay and a wide rollback window.
     public int InputDelay = 4;
-    public int RollbackFrames = 4;
+    public int RollbackFrames = 6;
     public int FakeLatencyTicks = 6;   // ~100ms at 60fps
     public int FakeJitterTicks = 2;
-    public int FakeDropPercent = 5;
+    public int FakeDropPercent = 40;
 
     // Null when both players share this keyboard.
     NetplaySession session;

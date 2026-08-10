@@ -31,7 +31,9 @@ public class UdpTransport : IInputTransport
     readonly FrameRing<ushort> recentlySent = new FrameRing<ushort>(64);
     readonly List<(int ArriveTick, byte[] Data)> held = new List<(int, byte[])>();
 
-    int lastAcked = -1;
+    // Newest frame of OURS the peer has told us it received. Anything past this keeps going out
+    // again. Not to be confused with our ack of them, which we only pass along in packets.
+    int peerAcked = -1;
     int tick;
     uint rng;
 
@@ -73,7 +75,6 @@ public class UdpTransport : IInputTransport
         if (Failed) return;
         tick++;
 
-        if (ackFrame > lastAcked) lastAcked = ackFrame;
         recentlySent.Set(frame, InputCodec.Pack(localInput));
 
         // Keep saying hello until the peer answers, so neither side starts alone.
@@ -87,8 +88,8 @@ public class UdpTransport : IInputTransport
             return;
         }
 
-        // Everything the peer hasn't confirmed, newest first.
-        int oldest = Math.Max(0, lastAcked + 1);
+        // Everything the peer hasn't confirmed receiving, newest first.
+        int oldest = Math.Max(0, peerAcked + 1);
         int count = Math.Clamp(frame - oldest + 1, 1, MaxFramesPerPacket);
 
         var stream = new MemoryStream();
@@ -151,7 +152,10 @@ public class UdpTransport : IInputTransport
             for (int i = 0; i < count; i++)
                 into.Add((newest - i, InputCodec.Unpack(r.ReadUInt16())));
 
-            r.ReadInt32(); // their ack of us — unused for now, we resend on our own schedule
+            // How far they've received from us — what sizes our resend window.
+            int theirAck = r.ReadInt32();
+            if (theirAck > peerAcked) peerAcked = theirAck;
+
             int csFrame = r.ReadInt32();
             uint csValue = r.ReadUInt32();
             if (csFrame >= 0)
