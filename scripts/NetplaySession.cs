@@ -50,6 +50,12 @@ public class NetplaySession
     {
         EnsurePrimed();
 
+        // Before the players exist there's nowhere to record an input, and marking the frame polled
+        // anyway would leave a hole in the log that LastConfirmedFrame could never advance past.
+        Player local = LocalPlayer;
+        Player remote = RemotePlayer;
+        if (local == null || remote == null) return;
+
         int inputFrame = match.FrameCount + InputDelay;
 
         // Only our own character is read from the keyboard; the opponent's arrives over the wire,
@@ -64,10 +70,6 @@ public class NetplaySession
             inputManager.PollLocalInputs(inputFrame);
             lastPolledFrame = inputFrame;
         }
-
-        Player local = LocalPlayer;
-        Player remote = RemotePlayer;
-        if (local == null || remote == null) return;
 
         SendOurInput(local, remote, inputFrame);
         TakeTheirInput(remote);
@@ -86,6 +88,19 @@ public class NetplaySession
 
     // Whether the sim may advance to `frame`. False until the peer turns up
     public bool CanAdvance(int frame) => Ready && HaveConfirmedInputs(frame - MaxRollbackFrames);
+
+    // Why CanAdvance said no. A long stall is normally one of three things, and they look identical
+    // on screen.
+    public string StallReason(int frame)
+    {
+        if (match.Player1 == null || match.Player2 == null)
+            return "the fighting scene hasn't registered both players";
+        if (!Ready)
+            return $"nothing has arrived from the peer yet (we are player {LocalPlayerNumber})";
+        return $"need inputs confirmed through frame {frame - MaxRollbackFrames}, "
+            + $"have P1 {match.Player1.InputLog.LastConfirmedFrame} "
+            + $"/ P2 {match.Player2.InputLog.LastConfirmedFrame}";
+    }
 
     public void Shutdown() => transport.Shutdown();
 

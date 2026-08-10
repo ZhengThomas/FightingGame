@@ -7,34 +7,20 @@ using Godot;
 // It decides how many ticks a frame is worth — none while stalled, one normally, several when a
 // replay is catching up. The connection itself lives in NetplaySession; this only asks what it
 // knows and acts on the answer.
+//
+// It doesn't decide how the match is connected — StartMatch is told. That call comes from whatever
+// screen ran before the fighting scene, so a lobby can hand over a Steam connection the same way
+// the menu hands over a loopback one.
 public partial class MatchDriver : Node
 {
     DebugManager debug;
     InputManager inputManager;
     MatchManager match;
 
-    // Play against a connection rather than sharing one keyboard.
-    public bool SimulateNetplay = true;
-    // Talk to another copy of the game for real, instead of the pretend connection. Needs
-    // SimulateNetplay as well — this only chooses which kind.
-    public bool UseRealNetwork = true;
-
-    // Which character this instance drives. Only used for the pretend connection; a real one works
-    // it out from which port it managed to grab.
-    public int LocalPlayerNumber = 1;
-
-    // InputDelay needs to be >= FakeLatencyTicks + FakeJitterTicks or the game constantly stalls.
-    // Set it lower on purpose to watch that happen. The two aren't symmetrical: InputDelay costs
-    // responsiveness on every input, RollbackFrames costs nothing until a guess is wrong — so bias
-    // toward a small delay and a wide rollback window.
-    public int InputDelay = 2;
-    public int RollbackFrames = 5;
-    public int FakeLatencyTicks = 4;   // ~100ms at 60fps
-    public int FakeJitterTicks = 2;
-    public int FakeDropPercent = 5;
-
     // Null when both players share this keyboard.
     NetplaySession session;
+    // False until StartMatch. Nothing ticks before then, so the menu can sit there.
+    bool matchRunning;
     int stalledFrames;
 
     // How many ticks the self-test rewinds and replays. Small enough to be cheap, long enough to
@@ -46,40 +32,32 @@ public partial class MatchDriver : Node
         debug = GetNode<DebugManager>("/root/DebugManager");
         inputManager = GetNode<InputManager>("/root/InputManager");
         match = GetNode<MatchManager>("/root/MatchManager");
-
-        if (SimulateNetplay)
-            session = new NetplaySession(match, inputManager, MakeTransport(),
-                                         InputDelay, RollbackFrames);
     }
 
     public override void _ExitTree() => session?.Shutdown();
 
-    IInputTransport MakeTransport()
+    // Set up the next match. Call before swapping in the fighting scene — players register as that
+    // scene loads, and ticking starts as soon as they do.
+    public void StartMatch(MatchSetup setup)
     {
-        if (UseRealNetwork)
-        {
-            return new NetTransport(new UdpChannel())
-            {
-                ExtraLatencyTicks = FakeLatencyTicks,
-                JitterTicks = FakeJitterTicks,
-                DropPercent = FakeDropPercent,
-            };
-        }
-
-        var fake = new FakeNetwork(seed: 12345)
-        {
-            LocalPlayerNumber = LocalPlayerNumber,
-            DelayTicks = FakeLatencyTicks,
-            JitterTicks = FakeJitterTicks,
-            DropPercent = FakeDropPercent,
-        };
-        // No peer exists, so the pretend opponent is the second set of keys on this keyboard.
-        fake.PeerInputSource = _ => inputManager.ReadInputFor(LocalPlayerNumber == 1 ? 2 : 1);
-        return fake;
+        session = setup.Transport == null
+            ? null
+            : new NetplaySession(match, inputManager, setup.Transport,
+                                 setup.InputDelay, setup.RollbackFrames);
+        stalledFrames = 0;
+        matchRunning = true;
     }
 
     public override void _PhysicsProcess(double delta)
     {
+        if (!matchRunning)
+        {
+            // Nobody set a match up, so this is a scene run straight from the editor rather than
+            // reached through the menu. Give it a local one once its players exist.
+            if (match.Player1 == null) return;
+            StartMatch(default);
+        }
+
         if (debug.ConsumeShouldTick())
         {
             if (session != null)
@@ -105,6 +83,10 @@ public partial class MatchDriver : Node
                 // Either the peer hasn't turned up, or we're further ahead of what's arrived than
                 // we could replay. Both mean wait.
                 stalledFrames++;
+                // A brief stall is normal. One that lasts is a bug, so say what it's waiting on.
+                if (stalledFrames % 120 == 60)
+                    GD.Print($"Stalled {stalledFrames} frames at {match.FrameCount}: "
+                        + session.StallReason(match.FrameCount));
             }
         }
 
