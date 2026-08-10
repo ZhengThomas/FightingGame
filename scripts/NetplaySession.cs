@@ -30,6 +30,10 @@ public class NetplaySession
     int rollbackTo = -1;
     int desyncFrame = -1;
     bool primed;
+    // Highest frame we've already sampled the keyboard for. Sampling one twice would change an
+    // input the peer may already hold, and they'd never correct it — a confirmed frame arriving
+    // with a new value doesn't trigger a replay, it's just overwritten.
+    int lastPolledFrame = -1;
 
     public NetplaySession(MatchManager match, InputManager inputManager, IInputTransport transport,
                           int inputDelay, int maxRollbackFrames)
@@ -52,7 +56,14 @@ public class NetplaySession
         // and polling it here would overwrite what came in.
         inputManager.OwnsPlayer1 = LocalPlayerNumber == 1;
         inputManager.OwnsPlayer2 = LocalPlayerNumber == 2;
-        inputManager.PollLocalInputs(inputFrame);
+
+        // Once only. Step() also runs on stalled frames, where FrameCount hasn't moved, so polling
+        // unconditionally would resample a frame already sent to the peer.
+        if (inputFrame > lastPolledFrame)
+        {
+            inputManager.PollLocalInputs(inputFrame);
+            lastPolledFrame = inputFrame;
+        }
 
         Player local = LocalPlayer;
         Player remote = RemotePlayer;

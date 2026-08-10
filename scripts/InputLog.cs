@@ -36,6 +36,10 @@ public struct LoggedInput
 {
     public InputFrame Input;
     public bool Confirmed;
+    // Which frame this slot actually holds. The ring reuses slots every Size frames, so without
+    // this a read for a frame that was never written returns whatever lived there Size frames ago
+    // — silently, and as if it were real.
+    public int Frame;
 }
 
 public class InputLog : FrameRing<LoggedInput>
@@ -51,7 +55,7 @@ public class InputLog : FrameRing<LoggedInput>
     // A real input — the local keyboard, or one that arrived from the peer.
     public void SetConfirmed(int frame, InputFrame input)
     {
-        Set(frame, new LoggedInput { Input = input, Confirmed = true });
+        Set(frame, new LoggedInput { Input = input, Confirmed = true, Frame = frame });
         if (frame > NewestFrame) NewestFrame = frame;
         // Bounded by NewestFrame so this can't walk into stale slots the ring hasn't overwritten.
         while (LastConfirmedFrame < NewestFrame && IsConfirmed(LastConfirmedFrame + 1))
@@ -61,12 +65,20 @@ public class InputLog : FrameRing<LoggedInput>
     // A guess, standing in until the real input arrives.
     public void SetPredicted(int frame, InputFrame input)
     {
-        Set(frame, new LoggedInput { Input = input, Confirmed = false });
+        Set(frame, new LoggedInput { Input = input, Confirmed = false, Frame = frame });
         if (frame > NewestFrame) NewestFrame = frame;
     }
 
-    public InputFrame InputAt(int frame) => this[frame].Input;
-    public bool IsConfirmed(int frame) => this[frame].Confirmed;
+    public InputFrame InputAt(int frame) => SlotOf(frame).Input;
+    public bool IsConfirmed(int frame) => SlotOf(frame).Confirmed;
+
+    // The slot's contents if it really holds `frame`, otherwise an empty unconfirmed input — which
+    // is the honest answer for a frame nothing was ever recorded for.
+    LoggedInput SlotOf(int frame)
+    {
+        LoggedInput slot = this[frame];
+        return slot.Frame == frame ? slot : default;
+    }
 }
 
 // Sim-facing view over a Player's InputLog and ConsumedMarks, anchored at a specific tick.
