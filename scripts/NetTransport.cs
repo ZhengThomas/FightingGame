@@ -3,31 +3,21 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 
-// A real connection between two copies of the game on this machine.
-//
-// Which side you are is decided by which port you manage to grab: first instance takes PortA and
-// becomes player 1, second finds it taken, falls back to PortB and becomes player 2.
-public class UdpTransport : IInputTransport
+// Turns inputs into packets and back, over whatever channel it's handed. Owns the packet format,
+// the resend window, the ack tracking, the checksum exchange, and the artificial network
+// conditions — everything that stays the same whether the bytes travel over UDP or Steam.
+public class NetTransport : IInputTransport
 {
-    public const int PortA = 7000;
-    public const int PortB = 7001;
-
     // Cap on frames per packet — sends normally cover only what the peer hasn't acknowledged.
     public const int MaxFramesPerPacket = 32;
 
-    // Artificial network conditions, applied on top of real packets. Two windows on one desk talk
-    // in well under a millisecond with no loss, so without these everything looks perfect and
-    // proves nothing.
+    // Artificial network conditions, applied to packets on arrival. This is to simualte a bad connection
+    // when testing on your own local computer
     public int ExtraLatencyTicks = 0;
     public int JitterTicks = 0;
     public int DropPercent = 0;
 
-    enum MsgType : byte { Hello = 1, Input = 2 }
-
-    public bool Ready { get; private set; }
-    public int LocalPlayerNumber { get; private set; }
-
-    readonly PacketPeerUdp socket = new PacketPeerUdp();
+    readonly IPacketChannel channel;
     readonly FrameRing<ushort> recentlySent = new FrameRing<ushort>(64);
     readonly List<(int ArriveTick, byte[] Data)> held = new List<(int, byte[])>();
 
@@ -41,52 +31,19 @@ public class UdpTransport : IInputTransport
     int checksumFrame;
     uint checksumValue;
 
-    public bool Failed { get; private set; }
+    public bool Ready => channel.Connected;
+    public int LocalPlayerNumber => channel.LocalPlayerNumber;
 
-    public UdpTransport(int seed = 987654321)
+    public NetTransport(IPacketChannel channel, int seed = 987654321)
     {
+        this.channel = channel;
         rng = seed == 0 ? 1u : (uint)seed;
-
-        int peerPort;
-        if (socket.Bind(PortA) == Error.Ok)
-        {
-            LocalPlayerNumber = 1;
-            peerPort = PortB;
-        }
-        else if (socket.Bind(PortB) == Error.Ok)
-        {
-            LocalPlayerNumber = 2;
-            peerPort = PortA;
-        }
-        else
-        {
-            GD.PushError($"UdpTransport: couldn't bind {PortA} or {PortB}. Is a third copy running?");
-            Failed = true;
-            return;
-        }
-
-        socket.SetDestAddress("127.0.0.1", peerPort);
-        GD.Print($"UdpTransport: player {LocalPlayerNumber}, listening on "
-            + $"{(LocalPlayerNumber == 1 ? PortA : PortB)}, talking to {peerPort}");
     }
 
     public void Send(int frame, InputFrame localInput, int ackFrame, int csFrame, uint checksum)
     {
-        if (Failed) return;
         tick++;
-
         recentlySent.Set(frame, InputCodec.Pack(localInput));
-
-        // Keep saying hello until the peer answers, so neither side starts alone.
-        if (!Ready)
-        {
-            var hello = new MemoryStream();
-            var hw = new BinaryWriter(hello);
-            hw.Write((byte)MsgType.Hello);
-            hw.Write((byte)LocalPlayerNumber);
-            socket.PutPacket(hello.ToArray());
-            return;
-        }
 
         // Everything the peer hasn't confirmed receiving, newest first.
         int oldest = Math.Max(0, peerAcked + 1);
@@ -94,8 +51,6 @@ public class UdpTransport : IInputTransport
 
         var stream = new MemoryStream();
         var w = new BinaryWriter(stream);
-        w.Write((byte)MsgType.Input);
-        w.Write((byte)LocalPlayerNumber);
         w.Write(frame);
         w.Write((byte)count);
         for (int i = 0; i < count; i++)
@@ -104,19 +59,18 @@ public class UdpTransport : IInputTransport
         w.Write(csFrame);
         w.Write(checksum);
 
-        socket.PutPacket(stream.ToArray());
+        // Handed over even before the channel is connected — it substitutes its own handshake.
+        channel.Send(stream.ToArray());
     }
 
     public List<(int Frame, InputFrame Input)> Poll()
     {
         var arrived = new List<(int, InputFrame)>();
-        if (Failed) return arrived;
 
-        // Drain the socket into the delay queue, dropping some if asked to.
-        while (socket.GetAvailablePacketCount() > 0)
+        // Drain the channel into the delay queue, dropping some if asked to.
+        byte[] data;
+        while ((data = channel.Receive()) != null)
         {
-            byte[] data = socket.GetPacket();
-            if (data.Length == 0) continue;
             if (DropPercent > 0 && Next(100) < DropPercent) continue;
 
             int delay = ExtraLatencyTicks + (JitterTicks > 0 ? (int)Next((uint)JitterTicks + 1) : 0);
@@ -127,9 +81,9 @@ public class UdpTransport : IInputTransport
         for (int i = held.Count - 1; i >= 0; i--)
         {
             if (held[i].ArriveTick > tick) continue;
-            byte[] data = held[i].Data;
+            byte[] due = held[i].Data;
             held.RemoveAt(i);
-            ReadPacket(data, arrived);
+            ReadPacket(due, arrived);
         }
 
         return arrived;
@@ -140,12 +94,6 @@ public class UdpTransport : IInputTransport
         try
         {
             var r = new BinaryReader(new MemoryStream(data));
-            var type = (MsgType)r.ReadByte();
-            r.ReadByte(); // sender's player number, unused — the port already told us
-
-            // Any packet at all means someone's there.
-            Ready = true;
-            if (type == MsgType.Hello) return;
 
             int newest = r.ReadInt32();
             int count = r.ReadByte();
@@ -167,7 +115,7 @@ public class UdpTransport : IInputTransport
         }
         catch (EndOfStreamException)
         {
-            GD.PushWarning("UdpTransport: malformed packet, ignoring.");
+            GD.PushWarning("NetTransport: malformed packet, ignoring.");
         }
     }
 
@@ -182,10 +130,12 @@ public class UdpTransport : IInputTransport
 
     public void Shutdown()
     {
-        socket.Close();
+        channel.Shutdown();
         held.Clear();
     }
 
+    // xorshift32 — small, and seeded so runs repeat. Gets stuck forever at zero, hence the guard in
+    // the constructor.
     uint Next(uint bound)
     {
         rng ^= rng << 13;
