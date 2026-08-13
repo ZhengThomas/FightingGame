@@ -93,6 +93,11 @@ custom_minimum_size = Vector2(0, 36)
 layout_mode = 2
 text = "Join Lobby"
 
+[node name="Start" type="Button" parent="Buttons"]
+custom_minimum_size = Vector2(0, 36)
+layout_mode = 2
+text = "Start Match"
+
 [node name="LobbyStatus" type="Label" parent="Buttons"]
 layout_mode = 2
 text = "Not in a lobby."

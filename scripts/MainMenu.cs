@@ -25,8 +25,21 @@ public partial class MainMenu : Control
     Godot.Button copyButton;
     Godot.Button joinButton;
     Godot.Button inviteButton;
+    Godot.Button startButton;
     LineEdit codeEntry;
     Label lobbyStatus;
+
+    // _Process keeps running until the scene actually swaps a frame later, so starting the match has
+    // to be one-shot. `announced` covers the host separately rather than reading back its own write
+    // to the lobby, which would hang it if Steam doesn't reflect that immediately.
+    bool starting;
+    bool announced;
+
+    void OnStart()
+    {
+        SteamLobby.Current.AnnounceStart();
+        announced = true;
+    }
 
     public override void _Ready()
     {
@@ -47,6 +60,7 @@ public partial class MainMenu : Control
         copyButton = GetNode<Godot.Button>("Buttons/Copy");
         joinButton = GetNode<Godot.Button>("Buttons/Join");
         inviteButton = GetNode<Godot.Button>("Buttons/Invite");
+        startButton = GetNode<Godot.Button>("Buttons/Start");
         codeEntry = GetNode<LineEdit>("Buttons/CodeEntry");
         lobbyStatus = GetNode<Label>("Buttons/LobbyStatus");
 
@@ -54,6 +68,7 @@ public partial class MainMenu : Control
         joinButton.Pressed += OnJoin;
         copyButton.Pressed += () => DisplayServer.ClipboardSet(SteamLobby.Current.Code.ToString());
         inviteButton.Pressed += () => SteamLobby.Current.OpenInviteOverlay();
+        startButton.Pressed += OnStart;
         GetNode<Godot.Button>("Buttons/Paste").Pressed += () => codeEntry.Text = DisplayServer.ClipboardGet();
 
         if (!SteamManager.Available)
@@ -98,11 +113,20 @@ public partial class MainMenu : Control
         SteamLobby lobby = SteamLobby.Current;
         copyButton.Disabled = lobby == null;
         inviteButton.Disabled = lobby == null;
+        // Only the host starts it, and only once there's someone to play.
+        startButton.Disabled = lobby == null || !lobby.IsHost || !lobby.IsFull;
         if (lobby == null) return;
 
         lobbyStatus.Text = $"Lobby {lobby.Code}\n{lobby.MemberNames()}\n"
             + $"You are player {lobby.LocalPlayerNumber}"
             + (lobby.IsFull ? "" : " — waiting for an opponent");
+
+        // Both sides land here: the host from its own button, the other on seeing the lobby say so.
+        if ((announced || lobby.MatchStarted) && !starting)
+        {
+            starting = true;
+            Begin(new NetTransport(new SteamChannel(lobby)));
+        }
     }
 
     // Built by hand rather than with ChangeSceneToFile so the setup is in place before anything in

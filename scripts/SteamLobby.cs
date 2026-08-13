@@ -29,6 +29,17 @@ public class SteamLobby
     public int MemberCount => lobby.MemberCount;
     public bool IsFull => MemberCount >= Capacity;
 
+    // Who the guest dials to open a connection.
+    public SteamId HostId => lobby.Owner.Id;
+
+    // How the host tells the other side to load the fighting scene. Written on the lobby rather
+    // than sent down the game connection, which doesn't exist yet at this point.
+    const string StateKey = "state";
+    const string Playing = "playing";
+
+    public void AnnounceStart() => lobby.SetData(StateKey, Playing);
+    public bool MatchStarted => lobby.GetData(StateKey) == Playing;
+
     // The other person, or default while we're in here alone. This is who SteamChannel will send to.
     public SteamId PeerId
     {

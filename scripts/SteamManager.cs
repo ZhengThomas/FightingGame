@@ -32,6 +32,10 @@ public partial class SteamManager : Node
             GD.Print($"Steam: signed in as {PersonaName} ({SteamClient.SteamId.Value})");
 
             SteamFriends.OnGameLobbyJoinRequested += OnJoinRequested;
+
+            // Starts working out routes through Steam's relay servers now, rather than during the
+            // first connection attempt, which would otherwise stall for a few seconds.
+            SteamNetworkingUtils.InitRelayNetworkAccess();
         }
         catch (System.Exception e)
         {
