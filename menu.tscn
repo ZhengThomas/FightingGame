@@ -27,13 +27,13 @@ anchor_left = 0.5
 anchor_top = 0.5
 anchor_right = 0.5
 anchor_bottom = 0.5
-offset_left = -140.0
-offset_top = -70.0
-offset_right = 140.0
-offset_bottom = 70.0
+offset_left = -190.0
+offset_top = -220.0
+offset_right = 190.0
+offset_bottom = 220.0
 grow_horizontal = 2
 grow_vertical = 2
-theme_override_constants/separation = 12
+theme_override_constants/separation = 8
 
 [node name="Title" type="Label" parent="Buttons"]
 layout_mode = 2
@@ -41,21 +41,55 @@ text = "FIGHTING GAME"
 horizontal_alignment = 1
 
 [node name="Local" type="Button" parent="Buttons"]
-custom_minimum_size = Vector2(0, 40)
+custom_minimum_size = Vector2(0, 36)
 layout_mode = 2
 text = "Local Versus"
 
 [node name="Udp" type="Button" parent="Buttons"]
-custom_minimum_size = Vector2(0, 40)
+custom_minimum_size = Vector2(0, 36)
 layout_mode = 2
 text = "Network Test (two instances)"
 
 [node name="Fake" type="Button" parent="Buttons"]
-custom_minimum_size = Vector2(0, 40)
+custom_minimum_size = Vector2(0, 36)
 layout_mode = 2
 text = "Fake Connection (one instance)"
+
+[node name="Divider" type="HSeparator" parent="Buttons"]
+layout_mode = 2
 
 [node name="SteamStatus" type="Label" parent="Buttons"]
 layout_mode = 2
 text = "Steam: ..."
 horizontal_alignment = 1
+
+[node name="Host" type="Button" parent="Buttons"]
+custom_minimum_size = Vector2(0, 36)
+layout_mode = 2
+text = "Host Lobby"
+
+[node name="Copy" type="Button" parent="Buttons"]
+custom_minimum_size = Vector2(0, 36)
+layout_mode = 2
+text = "Copy Lobby Code"
+
+[node name="CodeEntry" type="LineEdit" parent="Buttons"]
+custom_minimum_size = Vector2(0, 36)
+layout_mode = 2
+placeholder_text = "paste a lobby code"
+
+[node name="Paste" type="Button" parent="Buttons"]
+custom_minimum_size = Vector2(0, 36)
+layout_mode = 2
+text = "Paste"
+
+[node name="Join" type="Button" parent="Buttons"]
+custom_minimum_size = Vector2(0, 36)
+layout_mode = 2
+text = "Join Lobby"
+
+[node name="LobbyStatus" type="Label" parent="Buttons"]
+layout_mode = 2
+text = "Not in a lobby."
+horizontal_alignment = 1
+autowrap_mode = 2
