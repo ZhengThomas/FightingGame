@@ -53,6 +53,7 @@ public class SteamLobby
         made.Value.SetJoinable(true);
 
         Current = new SteamLobby(made.Value);
+        Current.Advertise();
         return Current;
     }
 
@@ -65,12 +66,21 @@ public class SteamLobby
         if (joined == null) return null;
 
         Current = new SteamLobby(joined.Value);
+        Current.Advertise();
         return Current;
     }
+
+    // Puts "Join Game" next to our name on friends' lists. 
+    void Advertise() => SteamFriends.SetRichPresence("connect", $"+connect_lobby {Code}");
+
+    // Steam's own friend picker, over the game. Whoever they pick gets an invite; accepting it lands
+    // in SteamManager.OnJoinRequested on their side.
+    public void OpenInviteOverlay() => SteamFriends.OpenGameInviteOverlay(lobby.Id);
 
     public void Leave()
     {
         lobby.Leave();
+        SteamFriends.ClearRichPresence();
         if (Current == this) Current = null;
     }
 

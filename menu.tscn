@@ -68,6 +68,11 @@ custom_minimum_size = Vector2(0, 36)
 layout_mode = 2
 text = "Host Lobby"
 
+[node name="Invite" type="Button" parent="Buttons"]
+custom_minimum_size = Vector2(0, 36)
+layout_mode = 2
+text = "Invite Friend"
+
 [node name="Copy" type="Button" parent="Buttons"]
 custom_minimum_size = Vector2(0, 36)
 layout_mode = 2

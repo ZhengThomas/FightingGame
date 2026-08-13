@@ -24,6 +24,7 @@ public partial class MainMenu : Control
     Godot.Button hostButton;
     Godot.Button copyButton;
     Godot.Button joinButton;
+    Godot.Button inviteButton;
     LineEdit codeEntry;
     Label lobbyStatus;
 
@@ -45,12 +46,14 @@ public partial class MainMenu : Control
         hostButton = GetNode<Godot.Button>("Buttons/Host");
         copyButton = GetNode<Godot.Button>("Buttons/Copy");
         joinButton = GetNode<Godot.Button>("Buttons/Join");
+        inviteButton = GetNode<Godot.Button>("Buttons/Invite");
         codeEntry = GetNode<LineEdit>("Buttons/CodeEntry");
         lobbyStatus = GetNode<Label>("Buttons/LobbyStatus");
 
         hostButton.Pressed += OnHost;
         joinButton.Pressed += OnJoin;
         copyButton.Pressed += () => DisplayServer.ClipboardSet(SteamLobby.Current.Code.ToString());
+        inviteButton.Pressed += () => SteamLobby.Current.OpenInviteOverlay();
         GetNode<Godot.Button>("Buttons/Paste").Pressed += () => codeEntry.Text = DisplayServer.ClipboardGet();
 
         if (!SteamManager.Available)
@@ -90,8 +93,11 @@ public partial class MainMenu : Control
     // the Steam client's local cache rather than the network.
     public override void _Process(double delta)
     {
+        // Both need a lobby to act on, and one can appear without the menu doing anything — an
+        // accepted invite joins in the background.
         SteamLobby lobby = SteamLobby.Current;
         copyButton.Disabled = lobby == null;
+        inviteButton.Disabled = lobby == null;
         if (lobby == null) return;
 
         lobbyStatus.Text = $"Lobby {lobby.Code}\n{lobby.MemberNames()}\n"

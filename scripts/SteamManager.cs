@@ -1,5 +1,6 @@
 using Godot;
 using Steamworks;
+using Steamworks.Data;
 
 // Starts Steam and keeps it fed.
 //
@@ -29,6 +30,8 @@ public partial class SteamManager : Node
             Available = true;
             PersonaName = SteamClient.Name;
             GD.Print($"Steam: signed in as {PersonaName} ({SteamClient.SteamId.Value})");
+
+            SteamFriends.OnGameLobbyJoinRequested += OnJoinRequested;
         }
         catch (System.Exception e)
         {
@@ -42,9 +45,25 @@ public partial class SteamManager : Node
         if (Available) SteamClient.RunCallbacks();
     }
 
+    // Fires when a friend's invite is accepted, or they hit "Join Game" on the friends list, while
+    // the game is already open.
+    static async void OnJoinRequested(Lobby lobby, SteamId inviter)
+    {
+        // Mid-match, being yanked into someone else's lobby would be baffling.
+        if (MatchManager.Current != null)
+        {
+            GD.Print($"Ignoring a lobby invite from {inviter.Value} — already in a match.");
+            return;
+        }
+
+        if (await SteamLobby.Join(lobby.Id.Value) == null)
+            GD.PushWarning("Couldn't join the invited lobby.");
+    }
+
     public override void _ExitTree()
     {
         if (!Available) return;
+        SteamFriends.OnGameLobbyJoinRequested -= OnJoinRequested;
         SteamClient.Shutdown();
         Available = false;
     }
