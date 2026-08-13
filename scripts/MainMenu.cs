@@ -32,6 +32,10 @@ public partial class MainMenu : Control
         udp.Pressed += () => Begin(MakeUdpTransport());
         fake.Pressed += () => Begin(MakeFakeTransport());
 
+        GetNode<Label>("Buttons/SteamStatus").Text = SteamManager.Available
+            ? $"Steam: {SteamManager.PersonaName}"
+            : "Steam: not running";
+
         local.GrabFocus();
     }
 

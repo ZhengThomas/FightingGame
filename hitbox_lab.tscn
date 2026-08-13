@@ -10,8 +10,8 @@
 
 [node name="EditorPose" type="Node3D" parent="Player" unique_id=492835695]
 script = ExtResource("3_pose")
-Animation = "StandLight"
-Frame = 6
+Animation = "StandMedium"
+Frame = 19
 
 [node name="HitboxGizmo" type="Node3D" parent="Player" unique_id=2120891098]
 script = ExtResource("2_gizmo")

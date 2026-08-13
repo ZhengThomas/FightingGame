@@ -54,3 +54,8 @@ text = "Network Test (two instances)"
 custom_minimum_size = Vector2(0, 40)
 layout_mode = 2
 text = "Fake Connection (one instance)"
+
+[node name="SteamStatus" type="Label" parent="Buttons"]
+layout_mode = 2
+text = "Steam: ..."
+horizontal_alignment = 1
