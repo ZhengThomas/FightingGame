@@ -29,15 +29,23 @@ public partial class MainMenu : Control
     LineEdit codeEntry;
     Label lobbyStatus;
 
-    // _Process keeps running until the scene actually swaps a frame later, so starting the match has
-    // to be one-shot. `announced` covers the host separately rather than reading back its own write
-    // to the lobby, which would hang it if Steam doesn't reflect that immediately.
-    bool starting;
-    bool announced;
+    bool starting;      // one-shot: _Process runs on until the scene swap lands a frame later
+    bool announced;     // the host's own copy, not read back off the lobby
+    bool startFailure;  // already complained once
 
     void OnStart()
     {
-        SteamLobby.Current.AnnounceStart();
+        SteamLobby lobby = SteamLobby.Current;
+        if (lobby == null) return;
+
+        // A refused write means the guest never sees the go signal, so starting here would leave us
+        // alone in a match.
+        if (!lobby.AnnounceStart(InputDelay))
+        {
+            GD.PushError("Steam rejected the start signal. Press Start again.");
+            return;
+        }
+
         announced = true;
     }
 
@@ -66,8 +74,17 @@ public partial class MainMenu : Control
 
         hostButton.Pressed += OnHost;
         joinButton.Pressed += OnJoin;
-        copyButton.Pressed += () => DisplayServer.ClipboardSet(SteamLobby.Current.Code.ToString());
-        inviteButton.Pressed += () => SteamLobby.Current.OpenInviteOverlay();
+        // All three need a lobby, and their Disabled state is a frame behind — Godot handles input
+        // before _Process, so a click is judged against last frame's answer.
+        copyButton.Disabled = true;
+        inviteButton.Disabled = true;
+        startButton.Disabled = true;
+
+        copyButton.Pressed += () =>
+        {
+            if (SteamLobby.Current != null) DisplayServer.ClipboardSet(SteamLobby.Current.Code.ToString());
+        };
+        inviteButton.Pressed += () => SteamLobby.Current?.OpenInviteOverlay();
         startButton.Pressed += OnStart;
         GetNode<Godot.Button>("Buttons/Paste").Pressed += () => codeEntry.Text = DisplayServer.ClipboardGet();
 
@@ -123,21 +140,46 @@ public partial class MainMenu : Control
 
         // Both sides land here: the host from its own button, the other on seeing the lobby say so.
         if ((announced || lobby.MatchStarted) && !starting)
+            TryStart(lobby);
+    }
+
+    // `starting` is set last, so a throw in here is retried next frame rather than wedging the menu
+    // behind its own guard.
+    void TryStart(SteamLobby lobby)
+    {
+        try
         {
+            // The host's number, so both sides prime the same frames. Falls back to our own only on
+            // the host, where the two are the same value anyway.
+            int delay = lobby.AgreedInputDelay >= 0 ? lobby.AgreedInputDelay : InputDelay;
+
+            lobby.SealForMatch();
+            Begin(new NetTransport(new SteamChannel(lobby)), delay);
             starting = true;
-            Begin(new NetTransport(new SteamChannel(lobby)));
+        }
+        catch (System.Exception e)
+        {
+            // Retried every frame from here on, so only say it the first time.
+            if (startFailure) return;
+            startFailure = true;
+            GD.PushError($"Couldn't start the match ({e.Message}). Retrying each frame.");
         }
     }
 
     // Built by hand rather than with ChangeSceneToFile so the setup is in place before anything in
     // the fighting scene runs — the players register with MatchManager as it's added to the tree.
-    void Begin(IInputTransport transport)
+    void Begin(IInputTransport transport) => Begin(transport, InputDelay);
+
+    // Only the delay is passed in: over a connection both sides must use the same one, and that's
+    // the host's. RollbackFrames stays local — it only decides how far ahead of confirmed input
+    // this machine will run, so the two sides may differ without diverging.
+    void Begin(IInputTransport transport, int inputDelay)
     {
         Node match = GD.Load<PackedScene>(MatchScene).Instantiate();
         match.GetNode<MatchDriver>("MatchDriver").Setup = new MatchSetup
         {
             Transport = transport,
-            InputDelay = InputDelay,
+            InputDelay = inputDelay,
             RollbackFrames = RollbackFrames,
         };
 

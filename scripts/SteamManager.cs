@@ -32,15 +32,24 @@ public partial class SteamManager : Node
             GD.Print($"Steam: signed in as {PersonaName} ({SteamClient.SteamId.Value})");
 
             SteamFriends.OnGameLobbyJoinRequested += OnJoinRequested;
-
-            // Starts working out routes through Steam's relay servers now, rather than during the
-            // first connection attempt, which would otherwise stall for a few seconds.
-            SteamNetworkingUtils.InitRelayNetworkAccess();
         }
         catch (System.Exception e)
         {
             Available = false;
             GD.Print($"Steam unavailable ({e.Message}). Local and loopback play still work.");
+            return;
+        }
+
+        // Works out routes through Steam's relay servers now rather than during the first
+        // connection, which would otherwise stall for a few seconds. Caught separately: it's an
+        // optimisation, and failing it shouldn't cost us a Steam connection that already works.
+        try
+        {
+            SteamNetworkingUtils.InitRelayNetworkAccess();
+        }
+        catch (System.Exception e)
+        {
+            GD.PushWarning($"Steam relay warm-up failed ({e.Message}). First connection may be slow.");
         }
     }
 
