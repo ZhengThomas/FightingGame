@@ -52,6 +52,8 @@ public static class PlayerConstants
     public const int MaxPlayerSeparation = 60000;      // max distance between the two players
     public const int MaxDistanceFromCenter = 70000;    // max distance either player can be from the midpoint
     public const int CrossupProtectionWindow = 3;     // frames either direction counts as back after a crossup
+    // Upward speed a fatal hit gives, whatever landed it, so every death reads the same.
+    public const int KOLaunchForce = 1200;
     public const int AirBlockstunLandingPenalty = 15; // extra landing frames when touching down during air blockstun
     public const float FixedDelta = 0.01666f; // seconds-per-tick for animation only (not used by physics)
     public const int WallCornerInset = 2000; // keep the non-cornered player slightly off the wall
@@ -149,6 +151,9 @@ public partial class Player : Node3D
     [Export] public int PlayerNumber = 1;
     public const int MaxHealth = 1000;
     public int Health;
+
+    // Derived rather than stored, since I dont wanna store more stuff in snapshot
+    public bool Defeated => Health == 0;
     // Durable per-tick record of this player's raw inputs, indexed by absolute FrameCount.
     // Written once per real physics frame by whoever considers this player local (currently
     // always InputManager). Any re-simulation reads back from here — never from live keys.
@@ -423,7 +428,14 @@ public partial class Player : Node3D
         physics.VelocityX = 0;
         physics.PushbackVelocityX = pushX;
 
-        if (data.LaunchesOpponent || !physics.IsOnFloor)
+        // A fatal hit launches at a fixed height however it landed
+        if (Defeated)
+        {
+            TransitionTo(PlayerState.AirHitstun);
+            physics.VelocityY = PlayerConstants.KOLaunchForce;
+            hitReaction.HardKnockdown = true;
+        }
+        else if (data.LaunchesOpponent || !physics.IsOnFloor)
         {
             TransitionTo(PlayerState.AirHitstun);
             physics.VelocityY = data.LaunchForce;
@@ -1269,6 +1281,8 @@ public partial class Player : Node3D
         physics.VelocityX = 0;
         physics.VelocityY = 0;
         // TODO: check for quickrise input here
+        // The defeated stay down. Health going back up on the round reset is what lets them rise.
+        if (Defeated) return;
         if (hitReaction.Timer.Advance())
             TransitionTo(PlayerState.Wakeup);
     }

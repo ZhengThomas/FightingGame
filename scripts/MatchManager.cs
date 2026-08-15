@@ -140,6 +140,17 @@ public partial class MatchManager : Node
 
 	// Three seconds, one per number on screen.
 	public const int CountdownDuration = 180;
+	// How long the loser lies there before the round resets.
+	public const int KODuration = 120;
+	// Rounds needed to take the match.
+	public const int WinsNeeded = 2;
+
+	// The state every round begins from. Captured on the first tick rather than in _Ready so it
+	// can't depend on where the players sit in the scene — by the first tick they've registered.
+	//
+	// Resetting a round is restoring this
+	Snapshot roundStart;
+	bool haveRoundStart;
 
 	// Read-only for the HUD, which polls these rather than being told.
 	public RoundPhase Phase => phase;
@@ -179,8 +190,43 @@ public partial class MatchManager : Node
 	// did.
 	void AdvancePhase()
 	{
-		if (phase == RoundPhase.Countdown && phaseFrame >= CountdownDuration)
-			EnterPhase(RoundPhase.Fighting);
+		switch (phase)
+		{
+			case RoundPhase.Countdown:
+				if (phaseFrame >= CountdownDuration) EnterPhase(RoundPhase.Fighting);
+				break;
+
+			case RoundPhase.Fighting:
+				if (Player1?.Defeated == true || Player2?.Defeated == true)
+					EnterPhase(RoundPhase.KO);
+				break;
+
+			case RoundPhase.KO:
+				if (phaseFrame >= KODuration) ResetRound();
+				break;
+		}
+	}
+
+	// Puts the world back to how the match started, carrying only what needs to be rememebered
+	void ResetRound()
+	{
+		bool p1Down = Player1?.Defeated == true;
+		bool p2Down = Player2?.Defeated == true;
+
+		Snapshot next = roundStart;
+		// Framecount must only climb, for the sake of input logs.
+		next.Match.FrameCount = FrameCount;
+		// The animator and VFX read this as elapsed time.
+		next.Match.SimFrame = SimFrame;
+		// Both down is a draw: nobody scores and the round runs again.
+		next.Match.P1Wins = p1Wins + (p2Down && !p1Down ? 1 : 0);
+		next.Match.P2Wins = p2Wins + (p1Down && !p2Down ? 1 : 0);
+
+		bool decided = next.Match.P1Wins >= WinsNeeded || next.Match.P2Wins >= WinsNeeded;
+		next.Match.Phase = decided ? RoundPhase.MatchOver : RoundPhase.Countdown;
+		next.Match.PhaseFrame = 0;
+
+		RestoreSnapshot(next);
 	}
 
 	void EnterPhase(RoundPhase next)
@@ -355,6 +401,13 @@ public partial class MatchManager : Node
 	// Advance the simulation by exactly one tick. Safe to call multiple times in a row for rollback
 	public void Tick()
 	{
+		// Nothing has happened yet on the first tick, so this is the pristine state to reset to.
+		if (!haveRoundStart)
+		{
+			roundStart = CaptureSnapshot();
+			haveRoundStart = true;
+		}
+
 		// Written before the players tick so a query for the current frame reads it.
 		hitPauseHistory.Set(FrameCount, IsInHitPause);
 
