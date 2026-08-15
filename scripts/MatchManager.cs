@@ -3,6 +3,16 @@ using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 
+// Where a round is up to. Sim state, so it snapshots and rolls back with everything else — a
+// correction arriving for a frame before someone died has to un-kill them.
+public enum RoundPhase
+{
+    Countdown,  // pre-round; nobody can act yet
+    Fighting,
+    KO,         // someone's health hit 0; the loser falls and stays down
+    MatchOver,  // someone took two rounds; the rematch menu owns input from here
+}
+
 public partial class MatchManager : Node
 {
     // The match currently in the tree, or null between matches. Set on entering rather than in
@@ -37,6 +47,10 @@ public partial class MatchManager : Node
         P1xLastFrame = p1xLastFrame,
         P2xLastFrame = p2xLastFrame,
         FrontPlayerNumber = frontPlayerNumber,
+        Phase = phase,
+        PhaseFrame = phaseFrame,
+        P1Wins = p1Wins,
+        P2Wins = p2Wins,
     };
 
     // Overwrite every sim-critical field on this MatchManager from a MatchSnapshot.
@@ -48,6 +62,10 @@ public partial class MatchManager : Node
         p1xLastFrame = s.P1xLastFrame;
         p2xLastFrame = s.P2xLastFrame;
         frontPlayerNumber = s.FrontPlayerNumber;
+        phase = s.Phase;
+        phaseFrame = s.PhaseFrame;
+        p1Wins = s.P1Wins;
+        p2Wins = s.P2Wins;
     }
 
     // Capture the full sim state (MatchManager + both players) into one struct — the unit
@@ -114,6 +132,27 @@ public partial class MatchManager : Node
 	public DebugDraw DebugDraw => debugDraw ??= GetNodeOrNull<DebugDraw>("../DebugLayer/DebugDraw");
 	public int p1xLastFrame { get; private set; } = PlayerConstants.ToSim(-1.5f);
 	public int p2xLastFrame { get; private set; } = PlayerConstants.ToSim(1.5f);
+	// Every round opens on the countdown, including the first.
+	RoundPhase phase = RoundPhase.Countdown;
+	int phaseFrame = 0;   // ticks spent in the current phase
+	int p1Wins = 0;
+	int p2Wins = 0;
+
+	// Three seconds, one per number on screen.
+	public const int CountdownDuration = 180;
+
+	// Read-only for the HUD, which polls these rather than being told.
+	public RoundPhase Phase => phase;
+	public int PhaseFrame => phaseFrame;
+	public int P1Wins => p1Wins;
+	public int P2Wins => p2Wins;
+	public int RoundNumber => p1Wins + p2Wins + 1;
+
+	// Whether the players are driving their own characters. False everywhere but Fighting, and the
+	// characters read it as "nothing is being pressed" rather than as a freeze — they keep falling,
+	// keep counting down timers, keep animating.
+	public bool InputsLive => phase == RoundPhase.Fighting;
+
 	int hitPauseFramesRemaining = 0;
 	// Per-frame record of whether the sim body was frozen. Not snapshotted — resim rewrites it.
 	readonly FrameRing<bool> hitPauseHistory = new FrameRing<bool>(InputManager.BufferSize);
@@ -134,6 +173,21 @@ public partial class MatchManager : Node
 	// starts an attack so the attacker — and its slash VFX — draw over the opponent, GGST-style,
 	// even before the hit connects.
 	public void BringToFront(Player player) => frontPlayerNumber = player?.PlayerNumber ?? 0;
+
+	// Moves the round on when a timed phase runs out. Runs at the end of a tick, before the state is
+	// recorded, so a rollback to this frame lands on the same side of the transition the first pass
+	// did.
+	void AdvancePhase()
+	{
+		if (phase == RoundPhase.Countdown && phaseFrame >= CountdownDuration)
+			EnterPhase(RoundPhase.Fighting);
+	}
+
+	void EnterPhase(RoundPhase next)
+	{
+		phase = next;
+		phaseFrame = 0;
+	}
 
 	public void TriggerHitPause(int duration, MoveType strength)
 	{
@@ -330,6 +384,8 @@ public partial class MatchManager : Node
 		if (Player2 != null) p2xLastFrame = Player2.SimX;
 
 		FrameCount++;
+		phaseFrame++;
+		AdvancePhase();
 		RecordGameState();
 	}
 

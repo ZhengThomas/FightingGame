@@ -93,12 +93,15 @@ public struct InputView
     public Player Owner;      // holds the ConsumedMarks that MarkConsumed writes through
     public int CurrentFrame;
 
+    // Set between rounds and after a KO. Blanks the whole history, not just the current frame
+    public bool Locked;
+
     public int BufferSize => Log.Size;
 
     // Input i frames before CurrentFrame (matches the old Buffer[i] semantics). The sim reads
     // inputs the same way whether they were confirmed or predicted — sorting that out is the
     // network layer's job, not the simulation's.
-    public InputFrame this[int i] => Log.InputAt(CurrentFrame - i);
+    public InputFrame this[int i] => Locked ? default : Log.InputAt(CurrentFrame - i);
 
     // True if hit pause froze the sim body i frames back. Frozen ticks don't count against
     // buffer windows.

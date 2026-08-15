@@ -161,7 +161,7 @@ public partial class Player : Node3D
     // Sim-facing view constructed on demand — bundles the log, this Player (to reach Marks), the
     // match's per-frame hit-pause record, and the current tick so extension methods can address
     // inputs by "i frames ago" while everything underneath is absolute-frame-indexed.
-    public InputView Inputs => new InputView { Log = InputLog, HitPause = Match.HitPauseHistory, Owner = this, CurrentFrame = Match.FrameCount };
+    public InputView Inputs => new InputView { Log = InputLog, HitPause = Match.HitPauseHistory, Owner = this, CurrentFrame = Match.FrameCount, Locked = !Match.InputsLive };
     public PhysicsState physics;
     // Sim-space position (PhysicsScale units). Source of truth for gameplay.
     public int SimX;
