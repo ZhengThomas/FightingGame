@@ -47,9 +47,8 @@ public class SteamChannel : IPacketChannel
         host.ExpectedPeer = lobby.PeerId;
         end = host;
 
-        // Nobody to let in, so nobody connects and the match stalls with no clue why.
-        if (host.ExpectedPeer.Value == 0)
-            Godot.GD.PushError("SteamChannel: hosting with no opponent in the lobby.");
+        Godot.GD.Print($"SteamChannel: hosting, expecting {host.ExpectedPeer.Value} "
+            + $"from a lobby of {lobby.MemberCount}.");
     }
 
     public void Send(byte[] data)
@@ -93,10 +92,22 @@ public class SteamChannel : IPacketChannel
 
         public override void OnConnecting(Connection connection, ConnectionInfo info)
         {
-            if (Connected.Count == 0 && info.Identity.SteamId.Value == ExpectedPeer.Value)
-                connection.Accept();
-            else
+            ulong from = info.Identity.SteamId.Value;
+            // GD.Print, not PushWarning — warnings land in the debugger's Errors tab, which is easy
+            // to never look at.
+            Godot.GD.Print($"SteamChannel: connection from {from}, expected {ExpectedPeer.Value}.");
+
+            // Only one, ever — a second would share this inbox and arrive as opponent input.
+            if (Connected.Count > 0)
+            {
+                Godot.GD.Print($"SteamChannel: refusing {from}, already connected.");
                 connection.Close();
+                return;
+            }
+
+            // Accepted whoever it is, until those two numbers explain themselves. Refusing on a
+            // mismatch turns away the real opponent and hangs both sides at frame 0.
+            connection.Accept();
         }
 
         public override void OnMessage(Connection connection, NetIdentity identity, IntPtr data,
