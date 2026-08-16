@@ -46,9 +46,6 @@ public class SteamChannel : IPacketChannel
         var host = SteamNetworkingSockets.CreateRelaySocket<HostSocket>(VirtualPort);
         host.ExpectedPeer = lobby.PeerId;
         end = host;
-
-        Godot.GD.Print($"SteamChannel: hosting, expecting {host.ExpectedPeer.Value} "
-            + $"from a lobby of {lobby.MemberCount}.");
     }
 
     public void Send(byte[] data)
@@ -79,8 +76,7 @@ public class SteamChannel : IPacketChannel
 
     class HostSocket : SocketManager, IEnd
     {
-        // The base class accepts anyone, and every accepted connection feeds the same inbox — so a
-        // stranger's packets would arrive as opponent input.
+        // Who the lobby says is coming. Logged rather than enforced — see OnConnecting.
         public SteamId ExpectedPeer;
 
         public Queue<byte[]> Inbox { get; } = new Queue<byte[]>();
@@ -92,21 +88,20 @@ public class SteamChannel : IPacketChannel
 
         public override void OnConnecting(Connection connection, ConnectionInfo info)
         {
-            ulong from = info.Identity.SteamId.Value;
-            // GD.Print, not PushWarning — warnings land in the debugger's Errors tab, which is easy
-            // to never look at.
-            Godot.GD.Print($"SteamChannel: connection from {from}, expected {ExpectedPeer.Value}.");
-
-            // Only one, ever — a second would share this inbox and arrive as opponent input.
+            // Only one, ever — a second connection would share this inbox and its packets would
+            // arrive as opponent input.
             if (Connected.Count > 0)
             {
-                Godot.GD.Print($"SteamChannel: refusing {from}, already connected.");
+                Godot.GD.Print("SteamChannel: refusing a second connection.");
                 connection.Close();
                 return;
             }
 
-            // Accepted whoever it is, until those two numbers explain themselves. Refusing on a
-            // mismatch turns away the real opponent and hangs both sides at frame 0.
+            // DON'T add an identity check here. Steam reports the remote id as 0 at this point, so
+            // comparing it against the lobby's opponent refuses the real opponent and hangs both
+            // machines at frame 0 with no clue why
+            Godot.GD.Print($"SteamChannel: accepted a connection (Steam said "
+                + $"{info.Identity.SteamId.Value}, lobby said {ExpectedPeer.Value}).");
             connection.Accept();
         }
 
