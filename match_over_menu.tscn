@@ -1,0 +1,75 @@
+[gd_scene load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/MatchOverMenu.cs" id="1_menu"]
+
+[node name="MatchOverMenu" type="CanvasLayer"]
+layer = 10
+script = ExtResource("1_menu")
+
+[node name="Root" type="Control" parent="."]
+visible = false
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+
+[node name="Banner" type="Label" parent="Root"]
+layout_mode = 1
+anchors_preset = 5
+anchor_left = 0.5
+anchor_right = 0.5
+offset_left = -200.0
+offset_top = 60.0
+offset_right = 200.0
+offset_bottom = 100.0
+grow_horizontal = 2
+text = "PLAYER 1 WINS"
+horizontal_alignment = 1
+
+[node name="P1" type="VBoxContainer" parent="Root"]
+layout_mode = 1
+anchors_preset = 4
+anchor_top = 0.5
+anchor_bottom = 0.5
+offset_left = 80.0
+offset_top = -40.0
+offset_right = 280.0
+offset_bottom = 40.0
+grow_vertical = 2
+theme_override_constants/separation = 10
+
+[node name="Rematch" type="Label" parent="Root/P1"]
+layout_mode = 2
+text = "REMATCH"
+
+[node name="Quit" type="Label" parent="Root/P1"]
+layout_mode = 2
+text = "QUIT"
+
+[node name="P2" type="VBoxContainer" parent="Root"]
+layout_mode = 1
+anchors_preset = 6
+anchor_left = 1.0
+anchor_top = 0.5
+anchor_right = 1.0
+anchor_bottom = 0.5
+offset_left = -280.0
+offset_top = -40.0
+offset_right = -80.0
+offset_bottom = 40.0
+grow_horizontal = 0
+grow_vertical = 2
+theme_override_constants/separation = 10
+
+[node name="Rematch" type="Label" parent="Root/P2"]
+layout_mode = 2
+text = "REMATCH"
+horizontal_alignment = 2
+
+[node name="Quit" type="Label" parent="Root/P2"]
+layout_mode = 2
+text = "QUIT"
+horizontal_alignment = 2

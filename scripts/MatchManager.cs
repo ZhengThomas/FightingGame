@@ -3,16 +3,6 @@ using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 
-// Where a round is up to. Sim state, so it snapshots and rolls back with everything else — a
-// correction arriving for a frame before someone died has to un-kill them.
-public enum RoundPhase
-{
-    Countdown,  // pre-round; nobody can act yet
-    Fighting,
-    KO,         // someone's health hit 0; the loser falls and stays down
-    MatchOver,  // someone took two rounds; the rematch menu owns input from here
-}
-
 public partial class MatchManager : Node
 {
     // The match currently in the tree, or null between matches. Set on entering rather than in
@@ -47,10 +37,7 @@ public partial class MatchManager : Node
         P1xLastFrame = p1xLastFrame,
         P2xLastFrame = p2xLastFrame,
         FrontPlayerNumber = frontPlayerNumber,
-        Phase = phase,
-        PhaseFrame = phaseFrame,
-        P1Wins = p1Wins,
-        P2Wins = p2Wins,
+        Flow = flow,
     };
 
     // Overwrite every sim-critical field on this MatchManager from a MatchSnapshot.
@@ -62,10 +49,7 @@ public partial class MatchManager : Node
         p1xLastFrame = s.P1xLastFrame;
         p2xLastFrame = s.P2xLastFrame;
         frontPlayerNumber = s.FrontPlayerNumber;
-        phase = s.Phase;
-        phaseFrame = s.PhaseFrame;
-        p1Wins = s.P1Wins;
-        p2Wins = s.P2Wins;
+        flow = s.Flow;
     }
 
     // Capture the full sim state (MatchManager + both players) into one struct — the unit
@@ -132,18 +116,10 @@ public partial class MatchManager : Node
 	public DebugDraw DebugDraw => debugDraw ??= GetNodeOrNull<DebugDraw>("../DebugLayer/DebugDraw");
 	public int p1xLastFrame { get; private set; } = PlayerConstants.ToSim(-1.5f);
 	public int p2xLastFrame { get; private set; } = PlayerConstants.ToSim(1.5f);
-	// Every round opens on the countdown, including the first.
-	RoundPhase phase = RoundPhase.Countdown;
-	int phaseFrame = 0;   // ticks spent in the current phase
-	int p1Wins = 0;
-	int p2Wins = 0;
-
-	// Three seconds, one per number on screen.
-	public const int CountdownDuration = 180;
-	// How long the loser lies there before the round resets.
-	public const int KODuration = 120;
-	// Rounds needed to take the match.
-	public const int WinsNeeded = 2;
+	// The countdown, the fight, the KO freeze, the score and the rematch decision all live in here
+	// rather than on this class, which had plenty to do already.
+	RoundFlow flow = RoundFlow.NewRound(0, 0);
+	public RoundFlow Flow => flow;
 
 	// The state every round begins from. Captured on the first tick rather than in _Ready so it
 	// can't depend on where the players sit in the scene — by the first tick they've registered.
@@ -151,18 +127,6 @@ public partial class MatchManager : Node
 	// Resetting a round is restoring this
 	Snapshot roundStart;
 	bool haveRoundStart;
-
-	// Read-only for the HUD, which polls these rather than being told.
-	public RoundPhase Phase => phase;
-	public int PhaseFrame => phaseFrame;
-	public int P1Wins => p1Wins;
-	public int P2Wins => p2Wins;
-	public int RoundNumber => p1Wins + p2Wins + 1;
-
-	// Whether the players are driving their own characters. False everywhere but Fighting, and the
-	// characters read it as "nothing is being pressed" rather than as a freeze — they keep falling,
-	// keep counting down timers, keep animating.
-	public bool InputsLive => phase == RoundPhase.Fighting;
 
 	int hitPauseFramesRemaining = 0;
 	// Per-frame record of whether the sim body was frozen. Not snapshotted — resim rewrites it.
@@ -185,54 +149,37 @@ public partial class MatchManager : Node
 	// even before the hit connects.
 	public void BringToFront(Player player) => frontPlayerNumber = player?.PlayerNumber ?? 0;
 
-	// Moves the round on when a timed phase runs out. Runs at the end of a tick, before the state is
-	// recorded, so a rollback to this frame lands on the same side of the transition the first pass
-	// did.
-	void AdvancePhase()
+	// Reads the two match-over buttons off the input log. Lives here rather than on RoundFlow
+	// because this class owns the players and the frame number, and here rather than on the menu node
+	// because that runs once per drawn frame — sim state may only be written from a tick.
+	MenuPresses ReadMenuPresses() => new MenuPresses
 	{
-		switch (phase)
-		{
-			case RoundPhase.Countdown:
-				if (phaseFrame >= CountdownDuration) EnterPhase(RoundPhase.Fighting);
-				break;
+		P1Up = JustPressed(Player1, Button.Up),
+		P1Down = JustPressed(Player1, Button.Down),
+		P1Confirm = JustPressed(Player1, Button.LightAttack),
+		P2Up = JustPressed(Player2, Button.Up),
+		P2Down = JustPressed(Player2, Button.Down),
+		P2Confirm = JustPressed(Player2, Button.LightAttack),
+	};
 
-			case RoundPhase.Fighting:
-				if (Player1?.Defeated == true || Player2?.Defeated == true)
-					EnterPhase(RoundPhase.KO);
-				break;
+	// Pressed this frame and not the one before. Straight off the log rather than through InputView,
+	// which reports empty outside Fighting.
+	bool JustPressed(Player player, Button button)
+		=> player != null
+		&& InputHelpers.IsPressed(player.InputLog.InputAt(FrameCount), button)
+		&& !InputHelpers.IsPressed(player.InputLog.InputAt(FrameCount - 1), button);
 
-			case RoundPhase.KO:
-				if (phaseFrame >= KODuration) ResetRound();
-				break;
-		}
-	}
-
-	// Puts the world back to how the match started, carrying only what needs to be rememebered
-	void ResetRound()
+	// Puts the world back to how the match started, carrying only what needs to be remembered.
+	void RestoreRoundStart(int w1, int w2)
 	{
-		bool p1Down = Player1?.Defeated == true;
-		bool p2Down = Player2?.Defeated == true;
-
 		Snapshot next = roundStart;
 		// Framecount must only climb, for the sake of input logs.
 		next.Match.FrameCount = FrameCount;
 		// The animator and VFX read this as elapsed time.
 		next.Match.SimFrame = SimFrame;
-		// Both down is a draw: nobody scores and the round runs again.
-		next.Match.P1Wins = p1Wins + (p2Down && !p1Down ? 1 : 0);
-		next.Match.P2Wins = p2Wins + (p1Down && !p2Down ? 1 : 0);
-
-		bool decided = next.Match.P1Wins >= WinsNeeded || next.Match.P2Wins >= WinsNeeded;
-		next.Match.Phase = decided ? RoundPhase.MatchOver : RoundPhase.Countdown;
-		next.Match.PhaseFrame = 0;
+		next.Match.Flow = RoundFlow.NewRound(w1, w2);
 
 		RestoreSnapshot(next);
-	}
-
-	void EnterPhase(RoundPhase next)
-	{
-		phase = next;
-		phaseFrame = 0;
 	}
 
 	public void TriggerHitPause(int duration, MoveType strength)
@@ -436,9 +383,19 @@ public partial class MatchManager : Node
 		if (Player1 != null) p1xLastFrame = Player1.SimX;
 		if (Player2 != null) p2xLastFrame = Player2.SimX;
 
+		// Read before FrameCount moves on: this tick's inputs are logged under its current value,
+		// so afterwards it would be looking at a frame nothing has been recorded for yet. Only
+		// matters once the match is decided.
+		MenuPresses presses = flow.Phase == RoundPhase.MatchOver ? ReadMenuPresses() : default;
+
 		FrameCount++;
-		phaseFrame++;
-		AdvancePhase();
+
+		switch (flow.Advance(Player1?.Defeated == true, Player2?.Defeated == true, presses))
+		{
+			case RoundStep.NextRound: RestoreRoundStart(flow.P1Wins, flow.P2Wins); break;
+			case RoundStep.Rematch: RestoreRoundStart(0, 0); break;
+		}
+
 		RecordGameState();
 	}
 

@@ -13,6 +13,8 @@ using Godot;
 // alone it's a local match on one keyboard, which is what running the scene from the editor gets.
 public partial class MatchDriver : Node
 {
+    const string MenuScene = "res://menu.tscn";
+
     // Written by the previous screen after instantiating the fighting scene but before adding it to
     // the tree, so it's in place by the time _Ready runs.
     public MatchSetup Setup;
@@ -80,6 +82,25 @@ public partial class MatchDriver : Node
         // Both run whether or not the sim advanced, so the view stays correct while frozen.
         match.SyncPresentation();
         match.DrawDebugBoxes();
+
+        // Read after ticking, and only once the sim has held the decision long enough that a
+        // rollback can't take it back.
+        if (match.Flow.ReadyToLeave) ReturnToMenu();
+    }
+
+    // Tears the match down and goes back to the front screen. _ExitTree closes the connection on
+    // the way out.
+    void ReturnToMenu()
+    {
+        // The lobby still says a match is running and won't accept anyone, and both sides are
+        // leaving it — so drop it rather than hand the menu a lobby that would restart instantly.
+        SteamLobby.Current?.Leave();
+
+        Node menu = GD.Load<PackedScene>(MenuScene).Instantiate();
+        Node old = GetTree().CurrentScene;
+        GetTree().Root.AddChild(menu);
+        GetTree().CurrentScene = menu;
+        old.QueueFree();
     }
 
     // Rewind to `frame` and re-run every tick since, now that we know what the opponent really did.

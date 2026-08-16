@@ -60,10 +60,9 @@ public struct MatchSnapshot
     public int FrontPlayerNumber;
 
     // Round bookkeeping. In here because the sim's next tick depends on all of it 
-    public RoundPhase Phase;
-    public int PhaseFrame;
-    public int P1Wins;
-    public int P2Wins;
+    // Phase, timers, score and the rematch decision. Snapshotted because a rematch rewrites both
+    // players, so both machines have to decide on it on the same frame.
+    public RoundFlow Flow;
 }
 
 // Per-player sim state — every field on Player that affects the simulation's forward evolution
@@ -140,10 +139,14 @@ public static class SnapshotHash
         h = Mix(h, m.P1xLastFrame);
         h = Mix(h, m.P2xLastFrame);
         h = Mix(h, m.FrontPlayerNumber);
-        h = Mix(h, (int)m.Phase);
-        h = Mix(h, m.PhaseFrame);
-        h = Mix(h, m.P1Wins);
-        h = Mix(h, m.P2Wins);
+        h = Mix(h, (int)m.Flow.Phase);
+        h = Mix(h, m.Flow.PhaseFrame);
+        h = Mix(h, m.Flow.P1Wins);
+        h = Mix(h, m.Flow.P2Wins);
+        h = Mix(h, (int)m.Flow.P1Hover);
+        h = Mix(h, (int)m.Flow.P2Hover);
+        h = Mix(h, (int)m.Flow.P1Choice);
+        h = Mix(h, (int)m.Flow.P2Choice);
         return h;
     }
 

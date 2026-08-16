@@ -10,6 +10,7 @@
 [ext_resource type="Script" uid="uid://biypgpgpadelt" path="res://scripts/HealthBarHud.cs" id="5_4arys"]
 [ext_resource type="Script" uid="uid://fn2tqsh65fm8" path="res://scripts/MatchManager.cs" id="6_match"]
 [ext_resource type="Script" uid="uid://q3igickf8y0f" path="res://scripts/MatchDriver.cs" id="7_driver"]
+[ext_resource type="PackedScene" path="res://match_over_menu.tscn" id="8_overmenu"]
 
 [sub_resource type="Environment" id="Environment_s68cd"]
 
@@ -161,6 +162,8 @@ PlayerNumber = 2
 
 [node name="MatchDriver" type="Node" parent="." unique_id=1815988756]
 script = ExtResource("7_driver")
+
+[node name="MatchOverMenu" parent="." instance=ExtResource("8_overmenu")]
 
 [node name="DebugLayer" type="CanvasLayer" parent="." unique_id=273675407]
 
