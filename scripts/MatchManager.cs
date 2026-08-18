@@ -121,6 +121,15 @@ public partial class MatchManager : Node
 	RoundFlow flow = RoundFlow.NewRound(0, 0);
 	public RoundFlow Flow => flow;
 
+	// Lowest health damage can leave a player on. Training sets it to 1 so nobody is ever Defeated,
+	// which is what keeps the KO phase from firing and rounds from ending — a rule rather than a
+	// mode, so nothing down here has to know what a game mode is.
+	public int HealthFloor { get; set; } = 0;
+
+	// Bumped every time the players are moved somewhere rather than walking there. The camera
+	// watches it so it can cut instead of gliding across the stage.
+	public int Teleports { get; private set; }
+
 	// The state every round begins from. Captured on the first tick rather than in _Ready so it
 	// can't depend on where the players sit in the scene — by the first tick they've registered.
 	//
@@ -170,17 +179,41 @@ public partial class MatchManager : Node
 		&& !InputHelpers.IsPressed(player.InputLog.InputAt(FrameCount - 1), button);
 
 	// Puts the world back to how the match started, carrying only what needs to be remembered.
-	void RestoreRoundStart(int w1, int w2)
+	void RestoreRoundStart(RoundFlow next_flow)
 	{
 		Snapshot next = roundStart;
 		// Framecount must only climb, for the sake of input logs.
 		next.Match.FrameCount = FrameCount;
 		// The animator and VFX read this as elapsed time.
 		next.Match.SimFrame = SimFrame;
-		next.Match.Flow = RoundFlow.NewRound(w1, w2);
+		next.Match.Flow = next_flow;
 
 		RestoreSnapshot(next);
+		Teleports++;
 	}
+
+	// Start the round again from the top, immediately. Used by training; a normal round reset goes
+	// through the flow instead.
+	public void RestartRound()
+	{
+		RestoreRoundStart(RoundFlow.Immediate());
+		Teleports++;
+	}
+
+	// Drop both players at these positions. Last-frame values move with them or the pushbox and wall
+	// logic spends a frame arguing with the placement.
+	public void PlacePlayers(int p1x, int p2x)
+	{
+		Teleports++;
+		if (Player1 != null) Player1.SimX = p1x;
+		if (Player2 != null) Player2.SimX = p2x;
+		p1xLastFrame = p1x;
+		p2xLastFrame = p2x;
+	}
+
+	// Where the players stood before anything happened, for anyone rebuilding a starting position.
+	public int StartX(int playerNumber)
+		=> playerNumber == 1 ? roundStart.P1.SimX : roundStart.P2.SimX;
 
 	public void TriggerHitPause(int duration, MoveType strength)
 	{
@@ -392,8 +425,8 @@ public partial class MatchManager : Node
 
 		switch (flow.Advance(Player1?.Defeated == true, Player2?.Defeated == true, presses))
 		{
-			case RoundStep.NextRound: RestoreRoundStart(flow.P1Wins, flow.P2Wins); break;
-			case RoundStep.Rematch: RestoreRoundStart(0, 0); break;
+			case RoundStep.NextRound: RestoreRoundStart(RoundFlow.NewRound(flow.P1Wins, flow.P2Wins)); break;
+			case RoundStep.Rematch: RestoreRoundStart(RoundFlow.NewRound(0, 0)); break;
 		}
 
 		RecordGameState();

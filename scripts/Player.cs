@@ -391,7 +391,7 @@ public partial class Player : Node3D
     public void TakeDamage(int amount)
     {
         if (amount <= 0) return;
-        Health = Math.Max(0, Health - amount);
+        Health = Math.Max(Match != null ? Match.HealthFloor : 0, Health - amount);
     }
 
     public virtual bool TakeHit(HitboxData data, int attackId, int direction, Player attacker)
@@ -533,6 +533,11 @@ public partial class Player : Node3D
             || currentState == PlayerState.CrouchBlockstun
             || currentState == PlayerState.AirBlockstun;
     }
+
+    // Whether their own inputs are steering them. False for everything they were put into against
+    // their will — hit, blocking, knocked down, or caught by a grab.
+    public bool InControl =>
+        !IsHurt() && !IsBlockingState() && currentState != PlayerState.HitByGrab;
 
     public int PushbackVelocityX => physics.PushbackVelocityX;
 

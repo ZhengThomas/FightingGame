@@ -19,12 +19,20 @@ public partial class CameraController : Camera3D
         Position = new Vector3(0, BaseY, Position.Z);
     }
 
+    // Starts behind so the very first frame is a cut rather than a glide in from wherever the
+    // camera was placed in the editor.
+    int lastTeleport = -1;
+
     public override void _Process(double delta)
     {
         if (match == null || match.Player1 == null || match.Player2 == null) return;
 
+        // Easing a teleport looks like the camera flying across the stage, so a reset cuts.
+        bool cut = match.Teleports != lastTeleport;
+        lastTeleport = match.Teleports;
+
         Vector3 target = CalculateTargetPosition();
-        Position = Position.Lerp(target, TrackSpeed * (float)delta);
+        Position = cut ? target : Position.Lerp(target, TrackSpeed * (float)delta);
     }
 
     private Vector3 CalculateTargetPosition()

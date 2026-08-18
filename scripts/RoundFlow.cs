@@ -77,6 +77,15 @@ public struct RoundFlow
         P2Hover = MatchOverChoice.Rematch,
     };
 
+    // Straight into the fight, no counting in. Training resets constantly and a countdown each time
+    // would be three seconds of nothing over and over.
+    public static RoundFlow Immediate() => new RoundFlow
+    {
+        Phase = RoundPhase.Fighting,
+        P1Hover = MatchOverChoice.Rematch,
+        P2Hover = MatchOverChoice.Rematch,
+    };
+
     // Whether the players are driving their own characters.
     public readonly bool InputsLive => Phase == RoundPhase.Fighting;
     public readonly bool Decided => Phase == RoundPhase.MatchOver || Phase == RoundPhase.Ending;

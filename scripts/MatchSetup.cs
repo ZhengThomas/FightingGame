@@ -5,6 +5,8 @@ public struct MatchSetup
     // Null means both players share this keyboard.
     public IInputTransport Transport;
 
+    public GameMode Mode;
+
     public int InputDelay;
     public int RollbackFrames;
 }

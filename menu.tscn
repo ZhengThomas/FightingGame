@@ -45,6 +45,11 @@ custom_minimum_size = Vector2(0, 36)
 layout_mode = 2
 text = "Local Versus"
 
+[node name="Training" type="Button" parent="Buttons"]
+custom_minimum_size = Vector2(0, 36)
+layout_mode = 2
+text = "Training"
+
 [node name="Udp" type="Button" parent="Buttons"]
 custom_minimum_size = Vector2(0, 36)
 layout_mode = 2

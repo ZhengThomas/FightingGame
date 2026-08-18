@@ -57,6 +57,7 @@ public partial class MainMenu : Control
         var fake = GetNode<Godot.Button>("Buttons/Fake");
 
         local.Pressed += () => Begin(null);
+        GetNode<Godot.Button>("Buttons/Training").Pressed += () => Begin(null, GameMode.Training);
         udp.Pressed += () => Begin(MakeUdpTransport());
         fake.Pressed += () => Begin(MakeFakeTransport());
 
@@ -168,17 +169,19 @@ public partial class MainMenu : Control
 
     // Built by hand rather than with ChangeSceneToFile so the setup is in place before anything in
     // the fighting scene runs — the players register with MatchManager as it's added to the tree.
-    void Begin(IInputTransport transport) => Begin(transport, InputDelay);
+    void Begin(IInputTransport transport, GameMode mode = GameMode.Versus)
+        => Begin(transport, InputDelay, mode);
 
     // Only the delay is passed in: over a connection both sides must use the same one, and that's
     // the host's. RollbackFrames stays local — it only decides how far ahead of confirmed input
     // this machine will run, so the two sides may differ without diverging.
-    void Begin(IInputTransport transport, int inputDelay)
+    void Begin(IInputTransport transport, int inputDelay, GameMode mode = GameMode.Versus)
     {
         Node match = GD.Load<PackedScene>(MatchScene).Instantiate();
         match.GetNode<MatchDriver>("MatchDriver").Setup = new MatchSetup
         {
             Transport = transport,
+            Mode = mode,
             InputDelay = inputDelay,
             RollbackFrames = RollbackFrames,
         };

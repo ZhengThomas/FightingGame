@@ -25,6 +25,8 @@ public partial class MatchDriver : Node
 
     // Null when both players share this keyboard.
     NetplaySession session;
+    // Null outside training.
+    TrainingMode training;
     int stalledFrames;
 
     // How many ticks the self-test rewinds and replays. Small enough to be cheap, long enough to
@@ -36,6 +38,8 @@ public partial class MatchDriver : Node
         debug = GetNode<DebugManager>("/root/DebugManager");
         match = MatchManager.Current;
         inputManager = new InputManager(match);
+
+        if (Setup.Mode == GameMode.Training) training = new TrainingMode(match);
 
         if (Setup.Transport != null)
             session = new NetplaySession(match, inputManager, Setup.Transport,
@@ -59,6 +63,9 @@ public partial class MatchDriver : Node
             int replayFrom = session?.TakeRollbackFrame() ?? -1;
             if (replayFrom >= 0)
                 ReplayFrom(replayFrom);
+
+            // Before the tick, and once per real frame rather than once per tick.
+            training?.Step();
 
             if (session == null || session.CanAdvance(match.FrameCount))
             {
