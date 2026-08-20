@@ -2,6 +2,7 @@
 
 [ext_resource type="Script" uid="uid://ctuxkuqx2royx" path="res://scripts/OptionsMenu.cs" id="1_options"]
 [ext_resource type="PackedScene" uid="uid://c4qk0v8rowrow" path="res://option_row.tscn" id="2_row"]
+[ext_resource type="PackedScene" uid="uid://dheftvnbsxpnk" path="res://rebind_popup.tscn" id="3_popup"]
 
 [sub_resource type="ButtonGroup" id="ButtonGroup_tabs"]
 
@@ -42,27 +43,27 @@ custom_minimum_size = Vector2(160, 40)
 layout_mode = 2
 size_flags_horizontal = 3
 size_flags_vertical = 4
-text = "Video"
 toggle_mode = true
 button_group = SubResource("ButtonGroup_tabs")
+text = "Video"
 
 [node name="Audio" type="Button" parent="Margin/Rows/Tabs" unique_id=1489225096]
 custom_minimum_size = Vector2(160, 40)
 layout_mode = 2
 size_flags_horizontal = 3
 size_flags_vertical = 4
-text = "Audio"
 toggle_mode = true
 button_group = SubResource("ButtonGroup_tabs")
+text = "Audio"
 
 [node name="Controls" type="Button" parent="Margin/Rows/Tabs" unique_id=628398274]
 custom_minimum_size = Vector2(160, 40)
 layout_mode = 2
 size_flags_horizontal = 3
 size_flags_vertical = 4
-text = "Controls"
 toggle_mode = true
 button_group = SubResource("ButtonGroup_tabs")
+text = "Controls"
 
 [node name="Body" type="PanelContainer" parent="Margin/Rows" unique_id=626762211]
 layout_mode = 2
@@ -110,18 +111,21 @@ theme_override_constants/separation = 10
 [node name="MasterRow" parent="Margin/Rows/Body/Pages/AudioPage/Rows" unique_id=296874432 instance=ExtResource("2_row")]
 layout_mode = 2
 CommitOnChange = true
+WrapAround = false
 Title = "Master Volume"
 Choices = PackedStringArray("0%", "5%", "10%", "15%", "20%", "25%", "30%", "35%", "40%", "45%", "50%", "55%", "60%", "65%", "70%", "75%", "80%", "85%", "90%", "95%", "100%")
 
 [node name="SfxRow" parent="Margin/Rows/Body/Pages/AudioPage/Rows" unique_id=1918666553 instance=ExtResource("2_row")]
 layout_mode = 2
 CommitOnChange = true
+WrapAround = false
 Title = "Sound Effects"
 Choices = PackedStringArray("0%", "5%", "10%", "15%", "20%", "25%", "30%", "35%", "40%", "45%", "50%", "55%", "60%", "65%", "70%", "75%", "80%", "85%", "90%", "95%", "100%")
 
 [node name="MusicRow" parent="Margin/Rows/Body/Pages/AudioPage/Rows" unique_id=338350475 instance=ExtResource("2_row")]
 layout_mode = 2
 CommitOnChange = true
+WrapAround = false
 Title = "Music"
 Choices = PackedStringArray("0%", "5%", "10%", "15%", "20%", "25%", "30%", "35%", "40%", "45%", "50%", "55%", "60%", "65%", "70%", "75%", "80%", "85%", "90%", "95%", "100%")
 
@@ -136,6 +140,16 @@ layout_mode = 2
 size_flags_horizontal = 3
 theme_override_constants/separation = 10
 
+[node name="Player1Button" type="Button" parent="Margin/Rows/Body/Pages/ControlsPage/Rows" unique_id=1403102009]
+custom_minimum_size = Vector2(0, 40)
+layout_mode = 2
+text = "Player 1 Controls"
+
+[node name="Player2Button" type="Button" parent="Margin/Rows/Body/Pages/ControlsPage/Rows" unique_id=225453294]
+custom_minimum_size = Vector2(0, 40)
+layout_mode = 2
+text = "Player 2 Controls"
+
 [node name="Footer" type="HBoxContainer" parent="Margin/Rows" unique_id=720386708]
 layout_mode = 2
 size_flags_vertical = 3
@@ -146,3 +160,7 @@ custom_minimum_size = Vector2(160, 40)
 layout_mode = 2
 size_flags_vertical = 4
 text = "Back"
+
+[node name="RebindPopup" parent="." unique_id=247169703 instance=ExtResource("3_popup")]
+visible = false
+layout_mode = 1

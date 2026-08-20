@@ -20,6 +20,9 @@ public partial class OptionRow : HBoxContainer
     // seen or heard while cycling; off for ones that disrupt the screen, like resolution.
     [Export] public bool CommitOnChange { get; set; }
 
+    // Off for long lists, where running off the end and landing back at the other is jarring.
+    [Export] public bool WrapAround { get; set; } = true;
+
     [Export] public string Title { get => title; set { title = value; RefreshTitle(); } }
     [Export] public string[] Choices { get => choices; set { choices = value; RefreshValue(); } }
 
@@ -40,15 +43,22 @@ public partial class OptionRow : HBoxContainer
     {
         titleLabel = GetNode<Label>("Title");
         valueLabel = GetNode<Label>("Value");
-        GetNode<Godot.Button>("Left").Pressed += () => Step(-1);
-        GetNode<Godot.Button>("Right").Pressed += () => Step(1);
+        RefreshTitle();
+        RefreshValue();
+
+        // The editor only needs the labels filled in. Connecting from a [Tool] script leaves
+        // delegate handles behind that don't survive an assembly reload.
+        if (Engine.IsEditorHint()) return;
+
+        GetNode<Godot.Button>("Left").Pressed += StepBack;
+        GetNode<Godot.Button>("Right").Pressed += StepForward;
 
         FocusEntered += QueueRedraw;
         FocusExited += QueueRedraw;
-
-        RefreshTitle();
-        RefreshValue();
     }
+
+    void StepBack() => Step(-1);
+    void StepForward() => Step(1);
 
     // A container draws nothing of its own, so the focused row would be indistinguishable from the
     // rest. Borrowing Button's pressed style makes a focused row read the same as the selected tab.
@@ -76,7 +86,12 @@ public partial class OptionRow : HBoxContainer
         if (choices.Length == 0) return;
 
         GrabFocus();
-        index = Wrap(index + direction);
+
+        int next = Wrap(index + direction);
+        // Already at an end with wrapping off — nothing changed, so nothing is announced.
+        if (next == index) return;
+
+        index = next;
         RefreshValue();
         EmitSignal(SignalName.Changed, index);
         if (CommitOnChange) EmitSignal(SignalName.Committed, index);
@@ -85,6 +100,7 @@ public partial class OptionRow : HBoxContainer
     int Wrap(int i)
     {
         if (choices.Length == 0) return 0;
+        if (!WrapAround) return Mathf.Clamp(i, 0, choices.Length - 1);
         return (i % choices.Length + choices.Length) % choices.Length;
     }
 

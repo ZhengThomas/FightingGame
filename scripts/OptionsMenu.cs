@@ -1,4 +1,5 @@
 using Godot;
+using System.Collections.Generic;
 
 // The options screen, shared by the main menu and the pause menu.
 //
@@ -24,6 +25,9 @@ public partial class OptionsMenu : Control
     Control[] pages;
     OptionRow resolution, fullscreen;
     OptionRow master, sfx, music;
+    RebindPopup rebind;
+    // Everything the popup has to take out of the focus order while it's up.
+    Control[] background;
 
     public override void _Ready()
     {
@@ -63,7 +67,55 @@ public partial class OptionsMenu : Control
         sfx.Committed += i => ApplyVolume(s => s.SfxVolume = ToLinear(i));
         music.Committed += i => ApplyVolume(s => s.MusicVolume = ToLinear(i));
 
+        Godot.Button p1 = GetNode<Godot.Button>(PagesPath + "ControlsPage/Rows/Player1Button");
+        Godot.Button p2 = GetNode<Godot.Button>(PagesPath + "ControlsPage/Rows/Player2Button");
+        p1.Pressed += () => OpenRebind(1);
+        p2.Pressed += () => OpenRebind(2);
+
+        rebind = GetNode<RebindPopup>("RebindPopup");
+        rebind.Closed += CloseRebind;
+
+        background = CollectFocusable(GetNode<Control>("Margin"));
+
         ShowPage(0);
+    }
+
+    void OpenRebind(int player)
+    {
+        SetBackgroundFocusable(false);
+        rebind.Open(player);
+    }
+
+    void CloseRebind()
+    {
+        SetBackgroundFocusable(true);
+        GetNode<Godot.Button>(PagesPath + "ControlsPage/Rows/Player1Button").GrabFocus();
+    }
+
+    // The dimmer stops the mouse reaching the menu, but focus navigation would still walk into it.
+    // Making the background unfocusable is what actually makes the popup modal.
+    void SetBackgroundFocusable(bool on)
+    {
+        foreach (Control c in background)
+            c.FocusMode = on ? FocusModeEnum.All : FocusModeEnum.None;
+    }
+
+    static Control[] CollectFocusable(Node root)
+    {
+        var found = new List<Control>();
+        Walk(root, found);
+        return found.ToArray();
+    }
+
+    static void Walk(Node node, List<Control> into)
+    {
+        foreach (Node child in node.GetChildren())
+        {
+            // Anything already unfocusable stays that way — the arrow buttons inside a row are
+            // deliberately skipped by navigation and restoring them would change behaviour.
+            if (child is Control c && c.FocusMode != FocusModeEnum.None) into.Add(c);
+            Walk(child, into);
+        }
     }
 
     public void Open()

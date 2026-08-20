@@ -140,6 +140,21 @@ public struct InputBindings
     public Key Left, Right, Up, Down;
     public Key LightAttack, MediumAttack, HeavyAttack, Dash;
     public Key Grab;
+
+    // Jump is read off Up rather than a key of its own, so it reports nothing.
+    public readonly Key KeyFor(Button b) => b switch
+    {
+        Button.Left         => Left,
+        Button.Right        => Right,
+        Button.Up           => Up,
+        Button.Down         => Down,
+        Button.LightAttack  => LightAttack,
+        Button.MediumAttack => MediumAttack,
+        Button.HeavyAttack  => HeavyAttack,
+        Button.Dash         => Dash,
+        Button.Grab         => Grab,
+        _ => Key.None,
+    };
 }
 
 // Facing-relative directional zones. All motion inputs are defined in these terms
@@ -468,7 +483,7 @@ public class InputManager
 {
     public const int BufferSize = 60;
 
-    static readonly InputBindings P1Bindings = new InputBindings
+    public static readonly InputBindings P1Bindings = new InputBindings
     {
         Left = Key.Left,
         Right = Key.Right,
@@ -481,7 +496,7 @@ public class InputManager
         Grab = Key.V,
     };
 
-    static readonly InputBindings P2Bindings = new InputBindings
+    public static readonly InputBindings P2Bindings = new InputBindings
     {
         Left = Key.A,
         Right = Key.D,

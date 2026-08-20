@@ -1,0 +1,19 @@
+[gd_scene format=3 uid="uid://cjpq7fmvg50to"]
+
+[ext_resource type="Script" path="res://scripts/BindRow.cs" id="1_bind"]
+
+[node name="BindRow" type="HBoxContainer"]
+custom_minimum_size = Vector2(0, 34)
+theme_override_constants/separation = 8
+script = ExtResource("1_bind")
+
+[node name="Name" type="Label" parent="."]
+layout_mode = 2
+size_flags_horizontal = 3
+size_flags_vertical = 4
+text = "Action"
+
+[node name="Key" type="Button" parent="."]
+custom_minimum_size = Vector2(140, 32)
+layout_mode = 2
+text = "-"
