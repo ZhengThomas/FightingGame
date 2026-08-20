@@ -3,6 +3,8 @@
 [ext_resource type="Script" uid="uid://ctuxkuqx2royx" path="res://scripts/OptionsMenu.cs" id="1_options"]
 [ext_resource type="PackedScene" uid="uid://c4qk0v8rowrow" path="res://option_row.tscn" id="2_row"]
 
+[sub_resource type="ButtonGroup" id="ButtonGroup_tabs"]
+
 [node name="OptionsMenu" type="Control" unique_id=508928046]
 layout_mode = 3
 anchors_preset = 15
@@ -41,6 +43,8 @@ layout_mode = 2
 size_flags_horizontal = 3
 size_flags_vertical = 4
 text = "Video"
+toggle_mode = true
+button_group = SubResource("ButtonGroup_tabs")
 
 [node name="Audio" type="Button" parent="Margin/Rows/Tabs" unique_id=1489225096]
 custom_minimum_size = Vector2(160, 40)
@@ -48,6 +52,8 @@ layout_mode = 2
 size_flags_horizontal = 3
 size_flags_vertical = 4
 text = "Audio"
+toggle_mode = true
+button_group = SubResource("ButtonGroup_tabs")
 
 [node name="Controls" type="Button" parent="Margin/Rows/Tabs" unique_id=628398274]
 custom_minimum_size = Vector2(160, 40)
@@ -55,6 +61,8 @@ layout_mode = 2
 size_flags_horizontal = 3
 size_flags_vertical = 4
 text = "Controls"
+toggle_mode = true
+button_group = SubResource("ButtonGroup_tabs")
 
 [node name="Body" type="PanelContainer" parent="Margin/Rows" unique_id=626762211]
 layout_mode = 2
@@ -98,6 +106,24 @@ horizontal_scroll_mode = 0
 layout_mode = 2
 size_flags_horizontal = 3
 theme_override_constants/separation = 10
+
+[node name="MasterRow" parent="Margin/Rows/Body/Pages/AudioPage/Rows" unique_id=296874432 instance=ExtResource("2_row")]
+layout_mode = 2
+CommitOnChange = true
+Title = "Master Volume"
+Choices = PackedStringArray("0%", "5%", "10%", "15%", "20%", "25%", "30%", "35%", "40%", "45%", "50%", "55%", "60%", "65%", "70%", "75%", "80%", "85%", "90%", "95%", "100%")
+
+[node name="SfxRow" parent="Margin/Rows/Body/Pages/AudioPage/Rows" unique_id=1918666553 instance=ExtResource("2_row")]
+layout_mode = 2
+CommitOnChange = true
+Title = "Sound Effects"
+Choices = PackedStringArray("0%", "5%", "10%", "15%", "20%", "25%", "30%", "35%", "40%", "45%", "50%", "55%", "60%", "65%", "70%", "75%", "80%", "85%", "90%", "95%", "100%")
+
+[node name="MusicRow" parent="Margin/Rows/Body/Pages/AudioPage/Rows" unique_id=338350475 instance=ExtResource("2_row")]
+layout_mode = 2
+CommitOnChange = true
+Title = "Music"
+Choices = PackedStringArray("0%", "5%", "10%", "15%", "20%", "25%", "30%", "35%", "40%", "45%", "50%", "55%", "60%", "65%", "70%", "75%", "80%", "85%", "90%", "95%", "100%")
 
 [node name="ControlsPage" type="ScrollContainer" parent="Margin/Rows/Body/Pages" unique_id=1481070172]
 visible = false

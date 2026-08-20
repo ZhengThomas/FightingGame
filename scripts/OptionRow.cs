@@ -16,6 +16,10 @@ public partial class OptionRow : HBoxContainer
     // Accept pressed — the shown choice is the one the player wants.
     [Signal] public delegate void CommittedEventHandler(int index);
 
+    // Whether an arrow press is itself a commit. On for settings that are cheap and want to be
+    // seen or heard while cycling; off for ones that disrupt the screen, like resolution.
+    [Export] public bool CommitOnChange { get; set; }
+
     [Export] public string Title { get => title; set { title = value; RefreshTitle(); } }
     [Export] public string[] Choices { get => choices; set { choices = value; RefreshValue(); } }
 
@@ -39,14 +43,27 @@ public partial class OptionRow : HBoxContainer
         GetNode<Godot.Button>("Left").Pressed += () => Step(-1);
         GetNode<Godot.Button>("Right").Pressed += () => Step(1);
 
+        FocusEntered += QueueRedraw;
+        FocusExited += QueueRedraw;
+
         RefreshTitle();
         RefreshValue();
     }
 
+    // A container draws nothing of its own, so the focused row would be indistinguishable from the
+    // rest. Borrowing Button's pressed style makes a focused row read the same as the selected tab.
+    public override void _Draw()
+    {
+        if (!HasFocus()) return;
+        DrawStyleBox(GetThemeStylebox("pressed", "Button"), new Rect2(Vector2.Zero, Size));
+    }
+
     public override void _GuiInput(InputEvent e)
     {
-        if (e.IsActionPressed("ui_left")) Step(-1);
-        else if (e.IsActionPressed("ui_right")) Step(1);
+        // allowEcho on the arrows so holding scrubs through the values. Without it the repeats
+        // aren't consumed here and focus navigation takes them
+        if (e.IsActionPressed("ui_left", allowEcho: true)) Step(-1);
+        else if (e.IsActionPressed("ui_right", allowEcho: true)) Step(1);
         else if (e.IsActionPressed("ui_accept")) EmitSignal(SignalName.Committed, index);
         else return;
 
@@ -62,6 +79,7 @@ public partial class OptionRow : HBoxContainer
         index = Wrap(index + direction);
         RefreshValue();
         EmitSignal(SignalName.Changed, index);
+        if (CommitOnChange) EmitSignal(SignalName.Committed, index);
     }
 
     int Wrap(int i)

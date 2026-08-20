@@ -23,6 +23,7 @@ public partial class OptionsMenu : Control
     Godot.Button[] tabs;
     Control[] pages;
     OptionRow resolution, fullscreen;
+    OptionRow master, sfx, music;
 
     public override void _Ready()
     {
@@ -50,10 +51,17 @@ public partial class OptionsMenu : Control
         resolution = GetNode<OptionRow>(PagesPath + "VideoPage/Rows/ResolutionRow");
         fullscreen = GetNode<OptionRow>(PagesPath + "VideoPage/Rows/FullscreenRow");
 
-        // Resizing on every arrow press would make cycling the list unusable, so the window only
-        // moves once the choice is confirmed. Display mode has no such cost.
+        // Which rows apply on the arrow and which wait for accept is set per row in the scene.
         resolution.Committed += ApplyResolution;
-        fullscreen.Changed += ApplyFullscreen;
+        fullscreen.Committed += ApplyFullscreen;
+
+        master = GetNode<OptionRow>(PagesPath + "AudioPage/Rows/MasterRow");
+        sfx = GetNode<OptionRow>(PagesPath + "AudioPage/Rows/SfxRow");
+        music = GetNode<OptionRow>(PagesPath + "AudioPage/Rows/MusicRow");
+
+        master.Committed += i => ApplyVolume(s => s.MasterVolume = ToLinear(i));
+        sfx.Committed += i => ApplyVolume(s => s.SfxVolume = ToLinear(i));
+        music.Committed += i => ApplyVolume(s => s.MusicVolume = ToLinear(i));
 
         ShowPage(0);
     }
@@ -63,18 +71,18 @@ public partial class OptionsMenu : Control
         LoadFromSettings();
         Show();
         ShowPage(0);
+        // Lands on the tab, not inside the page — selecting a tab should leave it highlighted.
+        tabs[0].GrabFocus();
     }
 
     void ShowPage(int index)
     {
         for (int i = 0; i < pages.Length; i++)
+        {
             pages[i].Visible = i == index;
-
-        // Focus follows the page, otherwise arrow keys act on whatever is now hidden.
-        Control first = pages[index].GetChildCount() > 0
-            ? pages[index].GetChild<Control>(0).GetChildOrNull<Control>(0)
-            : null;
-        (first ?? back).GrabFocus();
+            // No signal, or switching pages from code would re-enter this through Pressed.
+            tabs[i].SetPressedNoSignal(i == index);
+        }
     }
 
     // Puts the rows on the saved values. Called on open so a cancelled edit elsewhere doesn't leave
@@ -86,20 +94,35 @@ public partial class OptionsMenu : Control
 
         resolution.Index = System.Array.IndexOf(Resolutions, s.Resolution) is int i && i >= 0 ? i : 0;
         fullscreen.Index = s.Fullscreen ? 1 : 0;
+
+        master.Index = ToIndex(s.MasterVolume);
+        sfx.Index = ToIndex(s.SfxVolume);
+        music.Index = ToIndex(s.MusicVolume);
+    }
+
+    // The volume rows step in 5% intervals, so index 20 is full.
+    static float ToLinear(int index) => index * 0.05f;
+    static int ToIndex(float linear) => Mathf.Clamp(Mathf.RoundToInt(linear * 20f), 0, 20);
+
+    void ApplyVolume(System.Action<Settings> write)
+    {
+        if (Settings.Current == null) return;
+        write(Settings.Current);
+        Settings.Current.ApplyAudio();
     }
 
     void ApplyResolution(int index)
     {
         if (Settings.Current == null) return;
         Settings.Current.Resolution = Resolutions[index];
-        Settings.Current.Apply();
+        Settings.Current.ApplyDisplay();
     }
 
     void ApplyFullscreen(int index)
     {
         if (Settings.Current == null) return;
         Settings.Current.Fullscreen = index == 1;
-        Settings.Current.Apply();
+        Settings.Current.ApplyDisplay();
     }
 
     // Every row writes straight to the Settings autoload, so closing only has to persist it.

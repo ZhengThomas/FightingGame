@@ -8,6 +8,11 @@ focus_mode = 2
 theme_override_constants/separation = 8
 script = ExtResource("1_row")
 
+[node name="PadLeft" type="Control" parent="."]
+custom_minimum_size = Vector2(4, 0)
+layout_mode = 2
+mouse_filter = 2
+
 [node name="Title" type="Label" parent="."]
 layout_mode = 2
 size_flags_horizontal = 3
@@ -18,6 +23,7 @@ text = "Option"
 custom_minimum_size = Vector2(36, 0)
 layout_mode = 2
 focus_mode = 0
+flat = true
 text = "<"
 
 [node name="Value" type="Label" parent="."]
@@ -31,4 +37,10 @@ horizontal_alignment = 1
 custom_minimum_size = Vector2(36, 0)
 layout_mode = 2
 focus_mode = 0
+flat = true
 text = ">"
+
+[node name="PadRight" type="Control" parent="."]
+custom_minimum_size = Vector2(4, 0)
+layout_mode = 2
+mouse_filter = 2
