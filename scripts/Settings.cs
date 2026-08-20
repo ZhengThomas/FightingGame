@@ -24,6 +24,10 @@ public partial class Settings : Node
     public float SfxVolume { get; set; } = 1f;
     public float MusicVolume { get; set; } = 1f;
 
+    // --- Controls --- one set per local player, keyed the way InputManager reads them.
+    public InputBindings Player1 { get; set; } = InputManager.DefaultP1;
+    public InputBindings Player2 { get; set; } = InputManager.DefaultP2;
+
     public override void _EnterTree()
     {
         Current = this;
@@ -85,6 +89,29 @@ public partial class Settings : Node
         MasterVolume = file.GetValue(Section, "master_volume", MasterVolume).AsSingle();
         SfxVolume = file.GetValue(Section, "sfx_volume", SfxVolume).AsSingle();
         MusicVolume = file.GetValue(Section, "music_volume", MusicVolume).AsSingle();
+
+        Player1 = LoadBindings(file, "p1", Player1);
+        Player2 = LoadBindings(file, "p2", Player2);
+    }
+
+    // One key per entry rather than the struct as a whole, so a config written by an older build
+    // keeps whichever binds it did have.
+    static InputBindings LoadBindings(ConfigFile file, string prefix, InputBindings fallback)
+    {
+        InputBindings bindings = fallback;
+        foreach (Button button in InputBindings.Bindable)
+        {
+            int saved = file.GetValue(Section, $"{prefix}_{button}", (int)bindings.KeyFor(button))
+                            .AsInt32();
+            bindings.SetKey(button, (Key)saved);
+        }
+        return bindings;
+    }
+
+    static void SaveBindings(ConfigFile file, string prefix, InputBindings bindings)
+    {
+        foreach (Button button in InputBindings.Bindable)
+            file.SetValue(Section, $"{prefix}_{button}", (int)bindings.KeyFor(button));
     }
 
     public void Save()
@@ -95,6 +122,9 @@ public partial class Settings : Node
         file.SetValue(Section, "master_volume", MasterVolume);
         file.SetValue(Section, "sfx_volume", SfxVolume);
         file.SetValue(Section, "music_volume", MusicVolume);
+
+        SaveBindings(file, "p1", Player1);
+        SaveBindings(file, "p2", Player2);
         file.Save(SavePath);
     }
 }

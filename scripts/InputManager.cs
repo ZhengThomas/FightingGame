@@ -141,6 +141,29 @@ public struct InputBindings
     public Key LightAttack, MediumAttack, HeavyAttack, Dash;
     public Key Grab;
 
+    // Every button that owns a key. Jump isn't one — it's read off Up.
+    public static readonly Button[] Bindable =
+    {
+        Button.Left, Button.Right, Button.Up, Button.Down,
+        Button.LightAttack, Button.MediumAttack, Button.HeavyAttack, Button.Dash, Button.Grab,
+    };
+
+    public void SetKey(Button b, Key k)
+    {
+        switch (b)
+        {
+            case Button.Left:         Left = k; break;
+            case Button.Right:        Right = k; break;
+            case Button.Up:           Up = k; break;
+            case Button.Down:         Down = k; break;
+            case Button.LightAttack:  LightAttack = k; break;
+            case Button.MediumAttack: MediumAttack = k; break;
+            case Button.HeavyAttack:  HeavyAttack = k; break;
+            case Button.Dash:         Dash = k; break;
+            case Button.Grab:         Grab = k; break;
+        }
+    }
+
     // Jump is read off Up rather than a key of its own, so it reports nothing.
     public readonly Key KeyFor(Button b) => b switch
     {
@@ -483,7 +506,7 @@ public class InputManager
 {
     public const int BufferSize = 60;
 
-    public static readonly InputBindings P1Bindings = new InputBindings
+    public static readonly InputBindings DefaultP1 = new InputBindings
     {
         Left = Key.Left,
         Right = Key.Right,
@@ -496,7 +519,7 @@ public class InputManager
         Grab = Key.V,
     };
 
-    public static readonly InputBindings P2Bindings = new InputBindings
+    public static readonly InputBindings DefaultP2 = new InputBindings
     {
         Left = Key.A,
         Right = Key.D,
@@ -508,6 +531,16 @@ public class InputManager
         Dash = Key.P,
         Grab = Key.L,
     };
+
+    // What the keyboard is actually read through. Settings owns them once it exists; the defaults
+    // cover the editor running a scene directly, where no autoload has loaded a config yet.
+    public static InputBindings BindingsFor(int player)
+    {
+        if (Settings.Current != null)
+            return player == 1 ? Settings.Current.Player1 : Settings.Current.Player2;
+
+        return player == 1 ? DefaultP1 : DefaultP2;
+    }
 
     readonly MatchManager match;
 
@@ -522,13 +555,13 @@ public class InputManager
     // before the tick that consumes them.
     public void PollLocalInputs(int frame)
     {
-        if (OwnsPlayer1) ReadPlayerInput(match.Player1, P1Bindings, frame);
-        if (OwnsPlayer2) ReadPlayerInput(match.Player2, P2Bindings, frame);
+        if (OwnsPlayer1) ReadPlayerInput(match.Player1, BindingsFor(1), frame);
+        if (OwnsPlayer2) ReadPlayerInput(match.Player2, BindingsFor(2), frame);
     }
 
     // Read a player's keys without recording them. This is used with simulated netplay
     public static InputFrame ReadInputFor(int playerNumber)
-        => ReadBindings(playerNumber == 1 ? P1Bindings : P2Bindings);
+        => ReadBindings(BindingsFor(playerNumber));
 
     // Read live keyboard for this local player and record it into the durable per-tick log. The
     // sim reads through InputView, which addresses the log by absolute frame — any re-simulation

@@ -8,6 +8,9 @@ using Godot;
 [Tool]
 public partial class BindRow : HBoxContainer
 {
+    // The key box was pressed — the popup decides what listening for a key means.
+    [Signal] public delegate void RebindRequestedEventHandler();
+
     [Export] public string Action { get => action; set { action = value; RefreshName(); } }
 
     // Which button this row edits. Drives nothing in the editor — it's read when the popup opens.
@@ -22,7 +25,17 @@ public partial class BindRow : HBoxContainer
         nameLabel = GetNode<Label>("Name");
         keyButton = GetNode<Godot.Button>("Key");
         RefreshName();
+
+        if (Engine.IsEditorHint()) return;
+        keyButton.Pressed += RequestRebind;
     }
+
+    void RequestRebind() => EmitSignal(SignalName.RebindRequested);
+
+    // Waiting for a key. The box empties so it's obvious the old bind no longer applies.
+    public void ShowCapturing() => keyButton.Text = "-";
+
+    public void FocusKey() => keyButton.GrabFocus();
 
     // Called each time the popup opens so the row shows whichever player is being edited.
     public void ShowBinding(InputBindings bindings)
@@ -30,8 +43,6 @@ public partial class BindRow : HBoxContainer
         Key key = bindings.KeyFor(Bind);
         keyButton.Text = key == Key.None ? "-" : OS.GetKeycodeString(key);
     }
-
-    public void FocusKey() => keyButton.GrabFocus();
 
     void RefreshName()
     {

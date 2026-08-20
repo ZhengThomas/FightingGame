@@ -118,6 +118,16 @@ public partial class OptionsMenu : Control
         }
     }
 
+    // Escape backs out, same as the Back button. The popup handles its own escape first, so this
+    // stands down while it's up rather than closing both at once.
+    public override void _Input(InputEvent e)
+    {
+        if (!Visible || rebind.Visible || !e.IsActionPressed("ui_cancel")) return;
+
+        Close();
+        GetViewport().SetInputAsHandled();
+    }
+
     public void Open()
     {
         LoadFromSettings();
