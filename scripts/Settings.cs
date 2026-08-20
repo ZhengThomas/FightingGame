@@ -16,6 +16,9 @@ public partial class Settings : Node
     // --- Display ---
     public bool Fullscreen { get; set; } = false;
 
+    // Windowed size only — fullscreen takes the monitor's.
+    public Vector2I Resolution { get; set; } = new Vector2I(1152, 648);
+
     // --- Audio --- kept as 0..1 because that's what a slider wants; decibels happen in Apply.
     public float MasterVolume { get; set; } = 1f;
 
@@ -34,6 +37,15 @@ public partial class Settings : Node
             ? DisplayServer.WindowMode.Fullscreen
             : DisplayServer.WindowMode.Windowed);
 
+        // Resizing a fullscreen window fights the mode change, and the size is restored on the way
+        // back to windowed anyway.
+        if (!Fullscreen)
+        {
+            DisplayServer.WindowSetSize(Resolution);
+            Vector2I screen = DisplayServer.ScreenGetSize();
+            DisplayServer.WindowSetPosition((screen - Resolution) / 2);
+        }
+
         AudioServer.SetBusVolumeDb(AudioServer.GetBusIndex("Master"),
                                    Mathf.LinearToDb(MasterVolume));
     }
@@ -46,6 +58,7 @@ public partial class Settings : Node
         if (file.Load(SavePath) != Error.Ok) return;
 
         Fullscreen = file.GetValue(Section, "fullscreen", Fullscreen).AsBool();
+        Resolution = file.GetValue(Section, "resolution", Resolution).AsVector2I();
         MasterVolume = file.GetValue(Section, "master_volume", MasterVolume).AsSingle();
     }
 
@@ -53,6 +66,7 @@ public partial class Settings : Node
     {
         var file = new ConfigFile();
         file.SetValue(Section, "fullscreen", Fullscreen);
+        file.SetValue(Section, "resolution", Resolution);
         file.SetValue(Section, "master_volume", MasterVolume);
         file.Save(SavePath);
     }
