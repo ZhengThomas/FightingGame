@@ -1,6 +1,7 @@
-[gd_scene load_steps=2 format=3]
+[gd_scene load_steps=3 format=3]
 
 [ext_resource type="Script" path="res://scripts/MainMenu.cs" id="1_menu"]
+[ext_resource type="PackedScene" path="res://options_menu.tscn" id="2_options"]
 
 [node name="MainMenu" type="Control"]
 layout_mode = 3
@@ -103,8 +104,16 @@ custom_minimum_size = Vector2(0, 36)
 layout_mode = 2
 text = "Start Match"
 
+[node name="Options" type="Button" parent="Buttons"]
+custom_minimum_size = Vector2(0, 36)
+layout_mode = 2
+text = "Options"
+
 [node name="LobbyStatus" type="Label" parent="Buttons"]
 layout_mode = 2
 text = "Not in a lobby."
 horizontal_alignment = 1
 autowrap_mode = 2
+
+[node name="OptionsMenu" parent="." instance=ExtResource("2_options")]
+visible = false

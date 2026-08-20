@@ -17,6 +17,7 @@ config/icon="res://icon.svg"
 
 [autoload]
 
+Settings="*res://scripts/Settings.cs"
 DebugManager="*uid://dalfe5c2fhi30"
 SteamManager="*res://scripts/SteamManager.cs"
 

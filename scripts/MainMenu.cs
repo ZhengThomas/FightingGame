@@ -49,6 +49,18 @@ public partial class MainMenu : Control
         announced = true;
     }
 
+    Control buttons;
+    OptionsMenu options;
+
+    // Options covers the whole screen, so the menu behind it goes away rather than staying clickable
+    // underneath. Both halves are driven from here — the options scene reports that it closed and
+    // has no idea what opened it.
+    void OpenOptions()
+    {
+        buttons.Hide();
+        options.Open();
+    }
+
     public override void _Ready()
     {
         // Fully qualified — `Button` on its own is this project's input-button enum.
@@ -95,6 +107,11 @@ public partial class MainMenu : Control
             joinButton.Disabled = true;
             lobbyStatus.Text = "Steam isn't running, so lobbies are unavailable.";
         }
+
+        buttons = GetNode<Control>("Buttons");
+        options = GetNode<OptionsMenu>("OptionsMenu");
+        GetNode<Godot.Button>("Buttons/Options").Pressed += OpenOptions;
+        options.Closed += buttons.Show;
 
         local.GrabFocus();
     }
