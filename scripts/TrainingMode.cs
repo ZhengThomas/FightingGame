@@ -16,6 +16,10 @@ public class TrainingMode : IGameMode
     // Sim units between the cornered player and the other one.
     const int CornerGap = 8000;
 
+    // How long after they're back in control before health starts coming back, and how fast.
+    const int RegenDelay = 15;
+    const int RegenSpeed = 16;
+
     readonly MatchManager match;
 
     // What a pause menu edits. Read fresh every frame, so changing one takes effect immediately.
@@ -29,17 +33,18 @@ public class TrainingMode : IGameMode
     int p1Free;
     int p2Free;
 
-    public TrainingMode(MatchManager match) => this.match = match;
+    public TrainingMode(MatchManager match)
+    {
+        this.match = match;
+        // Nothing is ever Defeated, so the KO phase never fires and the round never ends.
+        match.HealthFloor = 1;
+    }
 
     // Once per real frame, before the sim ticks. Deliberately not inside Tick: a resim runs that
     // many times over, and reading the keyboard there would let the rollback self-test trip a reset
     // halfway through a replay.
     public void Step()
     {
-        // With a floor of 1 nobody is ever Defeated, so the KO phase never fires and the round
-        // never ends.
-        match.HealthFloor = Settings.InfiniteHealth ? 1 : 0;
-
         Regenerate(match.Player1, ref p1Free);
         Regenerate(match.Player2, ref p2Free);
 
@@ -75,11 +80,11 @@ public class TrainingMode : IGameMode
         }
 
         free++;
-        if (!Settings.HealthRegen || free < Settings.RegenDelay) return;
+        if (!Settings.HealthRegen || free < RegenDelay) return;
 
         if (player.Health < Player.MaxHealth)
             player.Health = System.Math.Min(Player.MaxHealth,
-                                            player.Health + Settings.RegenPerFrame);
+                                            player.Health + RegenSpeed);
     }
 
     void Place()

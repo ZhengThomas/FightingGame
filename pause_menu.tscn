@@ -2,6 +2,7 @@
 
 [ext_resource type="Script" path="res://scripts/PauseMenu.cs" id="1_pause"]
 [ext_resource type="PackedScene" path="res://options_menu.tscn" id="2_options"]
+[ext_resource type="PackedScene" path="res://training_menu.tscn" id="3_training"]
 
 [sub_resource type="StyleBoxFlat" id="panel"]
 bg_color = Color(0.13, 0.13, 0.16, 1)
@@ -79,11 +80,21 @@ custom_minimum_size = Vector2(0, 40)
 layout_mode = 2
 text = "Options"
 
+[node name="Training" type="Button" parent="Root/Panel/Margin/Box"]
+visible = false
+custom_minimum_size = Vector2(0, 40)
+layout_mode = 2
+text = "Training Settings"
+
 [node name="Quit" type="Button" parent="Root/Panel/Margin/Box"]
 custom_minimum_size = Vector2(0, 40)
 layout_mode = 2
 text = "Quit to Menu"
 
 [node name="OptionsMenu" parent="Root" instance=ExtResource("2_options")]
+visible = false
+layout_mode = 1
+
+[node name="TrainingMenu" parent="Root" instance=ExtResource("3_training")]
 visible = false
 layout_mode = 1

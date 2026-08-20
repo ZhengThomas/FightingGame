@@ -1,0 +1,70 @@
+[gd_scene format=3 uid="uid://catjhv0jup5o1"]
+
+[ext_resource type="Script" uid="uid://3nma0buidwku" path="res://scripts/TrainingMenu.cs" id="1_training"]
+[ext_resource type="PackedScene" uid="uid://c4qk0v8rowrow" path="res://option_row.tscn" id="2_row"]
+
+[node name="TrainingMenu" type="Control" unique_id=756918117]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+script = ExtResource("1_training")
+
+[node name="Margin" type="MarginContainer" parent="." unique_id=1946112261]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+theme_override_constants/margin_left = 32
+theme_override_constants/margin_top = 24
+theme_override_constants/margin_right = 32
+theme_override_constants/margin_bottom = 24
+
+[node name="Rows" type="VBoxContainer" parent="Margin" unique_id=848854341]
+layout_mode = 2
+theme_override_constants/separation = 16
+
+[node name="Title" type="Label" parent="Margin/Rows" unique_id=316766118]
+layout_mode = 2
+size_flags_vertical = 3
+size_flags_stretch_ratio = 0.1
+text = "TRAINING"
+horizontal_alignment = 1
+vertical_alignment = 1
+
+[node name="Body" type="PanelContainer" parent="Margin/Rows" unique_id=1307791368]
+layout_mode = 2
+size_flags_vertical = 3
+size_flags_stretch_ratio = 0.75
+
+[node name="Pad" type="MarginContainer" parent="Margin/Rows/Body" unique_id=351829800]
+layout_mode = 2
+theme_override_constants/margin_left = 20
+theme_override_constants/margin_top = 20
+theme_override_constants/margin_right = 20
+theme_override_constants/margin_bottom = 20
+
+[node name="List" type="VBoxContainer" parent="Margin/Rows/Body/Pad" unique_id=1145079327]
+layout_mode = 2
+theme_override_constants/separation = 10
+
+[node name="HealthRegenRow" parent="Margin/Rows/Body/Pad/List" unique_id=1396608588 instance=ExtResource("2_row")]
+layout_mode = 2
+CommitOnChange = true
+Title = "Health Regen"
+Choices = PackedStringArray("Off", "On")
+
+[node name="Footer" type="HBoxContainer" parent="Margin/Rows" unique_id=1397764253]
+layout_mode = 2
+size_flags_vertical = 3
+size_flags_stretch_ratio = 0.15
+
+[node name="Back" type="Button" parent="Margin/Rows/Footer" unique_id=137514133]
+custom_minimum_size = Vector2(160, 40)
+layout_mode = 2
+size_flags_vertical = 4
+text = "Back"

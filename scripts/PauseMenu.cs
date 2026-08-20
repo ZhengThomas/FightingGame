@@ -9,22 +9,27 @@ public partial class PauseMenu : CanvasLayer
 {
     Control root;
     OptionsMenu options;
-    Godot.Button resume, optionsButton, quit;
+    TrainingMenu trainingMenu;
+    Godot.Button resume, optionsButton, trainingButton, quit;
     MatchDriver driver;
 
     public override void _Ready()
     {
         root = GetNode<Control>("Root");
         options = GetNode<OptionsMenu>("Root/OptionsMenu");
+        trainingMenu = GetNode<TrainingMenu>("Root/TrainingMenu");
         resume = GetNode<Godot.Button>("Root/Panel/Margin/Box/Resume");
         optionsButton = GetNode<Godot.Button>("Root/Panel/Margin/Box/Options");
+        trainingButton = GetNode<Godot.Button>("Root/Panel/Margin/Box/Training");
         quit = GetNode<Godot.Button>("Root/Panel/Margin/Box/Quit");
         driver = GetNode<MatchDriver>("../MatchDriver");
 
         resume.Pressed += Resume;
         optionsButton.Pressed += OpenOptions;
+        trainingButton.Pressed += OpenTraining;
         quit.Pressed += QuitToMenu;
-        options.Closed += OnOptionsClosed;
+        options.Closed += OnSubMenuClosed;
+        trainingMenu.Closed += OnSubMenuClosed;
 
         // Only the panel — the options menu wires its own subtree in its _Ready.
         FocusFollowsMouse.Apply(GetNode("Root/Panel"));
@@ -37,8 +42,8 @@ public partial class PauseMenu : CanvasLayer
 
     public override void _Input(InputEvent e)
     {
-        // The options screen and its popup handle their own escape, innermost first.
-        if (options.Visible || !e.IsActionPressed("ui_cancel")) return;
+        // The sub-menus handle their own escape, innermost first.
+        if (options.Visible || trainingMenu.Visible || !e.IsActionPressed("ui_cancel")) return;
 
         if (root.Visible) Resume();
         else if (!driver.IsOnline) Pause();
@@ -49,6 +54,10 @@ public partial class PauseMenu : CanvasLayer
 
     void Pause()
     {
+        // Asked here rather than in _Ready: the mode is built in MatchDriver's own _Ready, and this
+        // way the button is right even if that order ever changes.
+        trainingButton.Visible = driver.Mode is TrainingMode;
+
         GetTree().Paused = true;
         root.Show();
         resume.GrabFocus();
@@ -62,8 +71,13 @@ public partial class PauseMenu : CanvasLayer
 
     void OpenOptions() => options.Open();
 
-    // Options closing leaves the pause menu up, so focus has to come back to something.
-    void OnOptionsClosed() => resume.GrabFocus();
+    void OpenTraining()
+    {
+        if (driver.Mode is TrainingMode training) trainingMenu.Open(training);
+    }
+
+    // A sub-menu closing leaves the pause menu up, so focus has to come back to something.
+    void OnSubMenuClosed() => resume.GrabFocus();
 
     void QuitToMenu()
     {
