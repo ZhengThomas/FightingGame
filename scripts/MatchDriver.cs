@@ -96,9 +96,13 @@ public partial class MatchDriver : Node
         if (match.Flow.ReadyToLeave) ReturnToMenu();
     }
 
+    // Whether a peer is on the other end. Offline is the only case where freezing this machine is
+    // harmless, so the pause menu asks.
+    public bool IsOnline => Setup.Transport != null;
+
     // Tears the match down and goes back to the front screen. _ExitTree closes the connection on
     // the way out.
-    void ReturnToMenu()
+    public void ReturnToMenu()
     {
         // The lobby still says a match is running and won't accept anyone, and both sides are
         // leaving it — so drop it rather than hand the menu a lobby that would restart instantly.

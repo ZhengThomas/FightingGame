@@ -65,8 +65,14 @@ public partial class OptionRow : HBoxContainer
     public override void _Draw()
     {
         if (!HasFocus()) return;
-        DrawStyleBox(GetThemeStylebox("pressed", "Button"), new Rect2(Vector2.Zero, Size));
+
+        // Asking for Button's style by name skips this node's own overrides, so the alpha has to
+        // come off here too.
+        highlight ??= OpaqueTheme.Opaque(GetThemeStylebox("pressed", "Button"));
+        DrawStyleBox(highlight, new Rect2(Vector2.Zero, Size));
     }
+
+    StyleBox highlight;
 
     public override void _GuiInput(InputEvent e)
     {

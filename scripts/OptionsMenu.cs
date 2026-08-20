@@ -77,6 +77,10 @@ public partial class OptionsMenu : Control
 
         background = CollectFocusable(GetNode<Control>("Margin"));
 
+        // Shown over a paused match, where the theme's translucent styles read as smeared.
+        OpaqueTheme.Apply(this);
+        FocusFollowsMouse.Apply(this);
+
         ShowPage(0);
     }
 

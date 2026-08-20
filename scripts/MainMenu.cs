@@ -63,6 +63,8 @@ public partial class MainMenu : Control
 
     public override void _Ready()
     {
+        FocusFollowsMouse.Apply(this);
+
         // Fully qualified — `Button` on its own is this project's input-button enum.
         var local = GetNode<Godot.Button>("Buttons/Local");
         var udp = GetNode<Godot.Button>("Buttons/Udp");
