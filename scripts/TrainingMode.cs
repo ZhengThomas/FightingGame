@@ -7,7 +7,7 @@ using Godot;
 // fighting scene, so swapping in a subclass would mean a second scene or runtime script juggling —
 // and overriding its Tick would put the snapshot ordering in play for no benefit. All this needs is
 // a hook once a frame and one rule, both of which MatchManager exposes plainly.
-public class TrainingMode
+public class TrainingMode : IGameMode
 {
     // Situations worth practising from. The plain corners put player 1 against the wall; holding up
     // as well corners the opponent there instead.
@@ -16,11 +16,10 @@ public class TrainingMode
     // Sim units between the cornered player and the other one.
     const int CornerGap = 8000;
 
-    // How long after they're back in control before health starts coming back, and how fast.
-    const int RegenDelay = 15;
-    const int RegenPerFrame = 16;
-
     readonly MatchManager match;
+
+    // What a pause menu edits. Read fresh every frame, so changing one takes effect immediately.
+    public readonly TrainingSettings Settings = new TrainingSettings();
 
     // What the last reset used. Holding nothing repeats it, so drilling the same setup doesn't mean
     // holding a direction every single time.
@@ -30,19 +29,17 @@ public class TrainingMode
     int p1Free;
     int p2Free;
 
-    public TrainingMode(MatchManager match)
-    {
-        this.match = match;
-        // Nothing is ever Defeated, so the KO phase never fires and the round never ends.
-        match.HealthFloor = 1;
-
-    }
+    public TrainingMode(MatchManager match) => this.match = match;
 
     // Once per real frame, before the sim ticks. Deliberately not inside Tick: a resim runs that
     // many times over, and reading the keyboard there would let the rollback self-test trip a reset
     // halfway through a replay.
     public void Step()
     {
+        // With a floor of 1 nobody is ever Defeated, so the KO phase never fires and the round
+        // never ends.
+        match.HealthFloor = Settings.InfiniteHealth ? 1 : 0;
+
         Regenerate(match.Player1, ref p1Free);
         Regenerate(match.Player2, ref p2Free);
 
@@ -67,7 +64,7 @@ public class TrainingMode
     // Damage sticks around long enough to read before it fills back in. Anything that took them out
     // of their own hands — hit, blocking, knocked down, grabbed — restarts the wait, so a combo's
     // damage doesn't heal away underneath it.
-    static void Regenerate(Player player, ref int free)
+    void Regenerate(Player player, ref int free)
     {
         if (player == null) return;
 
@@ -78,8 +75,11 @@ public class TrainingMode
         }
 
         free++;
-        if (free >= RegenDelay && player.Health < Player.MaxHealth)
-            player.Health = System.Math.Min(Player.MaxHealth, player.Health + RegenPerFrame);
+        if (!Settings.HealthRegen || free < Settings.RegenDelay) return;
+
+        if (player.Health < Player.MaxHealth)
+            player.Health = System.Math.Min(Player.MaxHealth,
+                                            player.Health + Settings.RegenPerFrame);
     }
 
     void Place()

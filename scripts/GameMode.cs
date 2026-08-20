@@ -7,3 +7,13 @@ public enum GameMode
     Versus,
     Training,
 }
+
+public static class GameModes
+{
+    // The one place a mode turns into behaviour. Versus is the plain match, so it gets nothing.
+    public static IGameMode Create(GameMode mode, MatchManager match) => mode switch
+    {
+        GameMode.Training => new TrainingMode(match),
+        _ => null,
+    };
+}

@@ -25,8 +25,9 @@ public partial class MatchDriver : Node
 
     // Null when both players share this keyboard.
     NetplaySession session;
-    // Null outside training.
-    TrainingMode training;
+    // Null in versus, which has no rules of its own. Public so a pause menu can find the mode it's
+    // showing settings for.
+    public IGameMode Mode { get; private set; }
     int stalledFrames;
 
     // How many ticks the self-test rewinds and replays. Small enough to be cheap, long enough to
@@ -39,7 +40,7 @@ public partial class MatchDriver : Node
         match = MatchManager.Current;
         inputManager = new InputManager(match);
 
-        if (Setup.Mode == GameMode.Training) training = new TrainingMode(match);
+        Mode = GameModes.Create(Setup.Mode, match);
 
         if (Setup.Transport != null)
             session = new NetplaySession(match, inputManager, Setup.Transport,
@@ -65,7 +66,7 @@ public partial class MatchDriver : Node
                 ReplayFrom(replayFrom);
 
             // Before the tick, and once per real frame rather than once per tick.
-            training?.Step();
+            Mode?.Step();
 
             if (session == null || session.CanAdvance(match.FrameCount))
             {
