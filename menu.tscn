@@ -1,7 +1,8 @@
-[gd_scene load_steps=3 format=3]
+[gd_scene format=3]
 
 [ext_resource type="Script" path="res://scripts/MainMenu.cs" id="1_menu"]
 [ext_resource type="PackedScene" path="res://options_menu.tscn" id="2_options"]
+[ext_resource type="PackedScene" path="res://lobby.tscn" id="3_lobby"]
 
 [node name="MainMenu" type="Control"]
 layout_mode = 3
@@ -21,99 +22,96 @@ grow_horizontal = 2
 grow_vertical = 2
 color = Color(0.09, 0.09, 0.11, 1)
 
-[node name="Buttons" type="VBoxContainer" parent="."]
+[node name="Title" type="Label" parent="."]
 layout_mode = 1
-anchors_preset = 8
-anchor_left = 0.5
-anchor_top = 0.5
-anchor_right = 0.5
-anchor_bottom = 0.5
-offset_left = -190.0
-offset_top = -220.0
-offset_right = 190.0
-offset_bottom = 220.0
-grow_horizontal = 2
-grow_vertical = 2
-theme_override_constants/separation = 8
-
-[node name="Title" type="Label" parent="Buttons"]
-layout_mode = 2
+anchors_preset = 0
+offset_left = 80.0
+offset_top = 72.0
+offset_right = 480.0
+offset_bottom = 104.0
 text = "FIGHTING GAME"
-horizontal_alignment = 1
 
-[node name="Local" type="Button" parent="Buttons"]
-custom_minimum_size = Vector2(0, 36)
+[node name="Columns" type="HBoxContainer" parent="."]
+layout_mode = 1
+anchors_preset = 4
+anchor_top = 0.5
+anchor_bottom = 0.5
+offset_left = 80.0
+offset_top = -88.0
+offset_right = 800.0
+offset_bottom = 180.0
+grow_vertical = 2
+theme_override_constants/separation = 28
+
+[node name="Main" type="VBoxContainer" parent="Columns"]
 layout_mode = 2
-text = "Local Versus"
+size_flags_vertical = 0
+theme_override_constants/separation = 16
 
-[node name="Training" type="Button" parent="Buttons"]
-custom_minimum_size = Vector2(0, 36)
+[node name="Play" type="Button" parent="Columns/Main"]
+custom_minimum_size = Vector2(260, 48)
 layout_mode = 2
-text = "Training"
+text = "Play"
 
-[node name="Udp" type="Button" parent="Buttons"]
-custom_minimum_size = Vector2(0, 36)
-layout_mode = 2
-text = "Network Test (two instances)"
-
-[node name="Fake" type="Button" parent="Buttons"]
-custom_minimum_size = Vector2(0, 36)
-layout_mode = 2
-text = "Fake Connection (one instance)"
-
-[node name="Divider" type="HSeparator" parent="Buttons"]
-layout_mode = 2
-
-[node name="SteamStatus" type="Label" parent="Buttons"]
-layout_mode = 2
-text = "Steam: ..."
-horizontal_alignment = 1
-
-[node name="Host" type="Button" parent="Buttons"]
-custom_minimum_size = Vector2(0, 36)
-layout_mode = 2
-text = "Host Lobby"
-
-[node name="Invite" type="Button" parent="Buttons"]
-custom_minimum_size = Vector2(0, 36)
-layout_mode = 2
-text = "Invite Friend"
-
-[node name="Copy" type="Button" parent="Buttons"]
-custom_minimum_size = Vector2(0, 36)
-layout_mode = 2
-text = "Copy Lobby Code"
-
-[node name="CodeEntry" type="LineEdit" parent="Buttons"]
-custom_minimum_size = Vector2(0, 36)
-layout_mode = 2
-placeholder_text = "paste a lobby code"
-
-[node name="Paste" type="Button" parent="Buttons"]
-custom_minimum_size = Vector2(0, 36)
-layout_mode = 2
-text = "Paste"
-
-[node name="Join" type="Button" parent="Buttons"]
-custom_minimum_size = Vector2(0, 36)
-layout_mode = 2
-text = "Join Lobby"
-
-[node name="Start" type="Button" parent="Buttons"]
-custom_minimum_size = Vector2(0, 36)
-layout_mode = 2
-text = "Start Match"
-
-[node name="Options" type="Button" parent="Buttons"]
-custom_minimum_size = Vector2(0, 36)
+[node name="Options" type="Button" parent="Columns/Main"]
+custom_minimum_size = Vector2(260, 48)
 layout_mode = 2
 text = "Options"
 
-[node name="LobbyStatus" type="Label" parent="Buttons"]
+[node name="Quit" type="Button" parent="Columns/Main"]
+custom_minimum_size = Vector2(260, 48)
 layout_mode = 2
-text = "Not in a lobby."
-horizontal_alignment = 1
-autowrap_mode = 2
+text = "Quit Game"
+
+[node name="Modes" type="VBoxContainer" parent="Columns"]
+visible = false
+layout_mode = 2
+size_flags_vertical = 0
+theme_override_constants/separation = 4
+
+[node name="Local" type="Button" parent="Columns/Modes"]
+custom_minimum_size = Vector2(220, 40)
+layout_mode = 2
+text = "Local Versus"
+
+[node name="Online" type="Button" parent="Columns/Modes"]
+custom_minimum_size = Vector2(220, 40)
+layout_mode = 2
+text = "Online"
+
+[node name="Training" type="Button" parent="Columns/Modes"]
+custom_minimum_size = Vector2(220, 40)
+layout_mode = 2
+text = "Training"
+
+[node name="Udp" type="Button" parent="Columns/Modes"]
+visible = false
+custom_minimum_size = Vector2(220, 40)
+layout_mode = 2
+text = "Network Test"
+
+[node name="Fake" type="Button" parent="Columns/Modes"]
+visible = false
+custom_minimum_size = Vector2(220, 40)
+layout_mode = 2
+text = "Fake Connection"
+
+[node name="SteamStatus" type="Label" parent="."]
+layout_mode = 1
+anchors_preset = 2
+anchor_top = 1.0
+anchor_bottom = 1.0
+offset_left = 80.0
+offset_top = -56.0
+offset_right = 480.0
+offset_bottom = -32.0
+grow_vertical = 0
+text = "Steam: ..."
+
+[node name="Lobby" parent="." instance=ExtResource("3_lobby")]
+visible = false
+layout_mode = 1
 
 [node name="OptionsMenu" parent="." instance=ExtResource("2_options")]
 visible = false
+layout_mode = 1

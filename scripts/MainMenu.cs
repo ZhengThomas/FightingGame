@@ -1,7 +1,10 @@
 using Godot;
 
-// First screen. Picks how the next match is connected, hands that to MatchDriver, then swaps in the
-// fighting scene.
+// First screen. Three buttons; Play opens a second column of modes beside it. Versus and training
+// go straight into a match, online swaps in the lobby page.
+//
+// It owns the netplay knobs and the one way into the fighting scene, so every page that starts a
+// match asks it rather than launching one itself.
 public partial class MainMenu : Control
 {
     const string MatchScene = "res://node_3d.tscn";
@@ -21,169 +24,96 @@ public partial class MainMenu : Control
     // out from which port it managed to grab.
     [Export] public int FakeLocalPlayer = 1;
 
-    Godot.Button hostButton;
-    Godot.Button copyButton;
-    Godot.Button joinButton;
-    Godot.Button inviteButton;
-    Godot.Button startButton;
-    LineEdit codeEntry;
-    Label lobbyStatus;
+    // Loopback and pretend connections are for testing netcode without two machines. Off in
+    // anything a player sees.
+    [Export] public bool DevTransports = false;
 
-    bool starting;      // one-shot: _Process runs on until the scene swap lands a frame later
-    bool announced;     // the host's own copy, not read back off the lobby
-    bool startFailure;  // already complained once
-
-    void OnStart()
-    {
-        SteamLobby lobby = SteamLobby.Current;
-        if (lobby == null) return;
-
-        // A refused write means the guest never sees the go signal, so starting here would leave us
-        // alone in a match.
-        if (!lobby.AnnounceStart(InputDelay))
-        {
-            GD.PushError("Steam rejected the start signal. Press Start again.");
-            return;
-        }
-
-        announced = true;
-    }
-
-    Control buttons;
+    Control columns, modes;
+    Godot.Button play, localVersus;
     OptionsMenu options;
-
-    // Options covers the whole screen, so the menu behind it goes away rather than staying clickable
-    // underneath. Both halves are driven from here — the options scene reports that it closed and
-    // has no idea what opened it.
-    void OpenOptions()
-    {
-        buttons.Hide();
-        options.Open();
-    }
+    LobbyMenu lobby;
 
     public override void _Ready()
     {
-        FocusFollowsMouse.Apply(this);
+        columns = GetNode<Control>("Columns");
+        modes = GetNode<Control>("Columns/Modes");
+        play = GetNode<Godot.Button>("Columns/Main/Play");
+        localVersus = GetNode<Godot.Button>("Columns/Modes/Local");
+        options = GetNode<OptionsMenu>("OptionsMenu");
+        lobby = GetNode<LobbyMenu>("Lobby");
 
-        // Fully qualified — `Button` on its own is this project's input-button enum.
-        var local = GetNode<Godot.Button>("Buttons/Local");
-        var udp = GetNode<Godot.Button>("Buttons/Udp");
-        var fake = GetNode<Godot.Button>("Buttons/Fake");
+        play.Pressed += ShowModes;
+        GetNode<Godot.Button>("Columns/Main/Options").Pressed += OpenOptions;
+        GetNode<Godot.Button>("Columns/Main/Quit").Pressed += () => GetTree().Quit();
 
-        local.Pressed += () => Begin(null);
-        GetNode<Godot.Button>("Buttons/Training").Pressed += () => Begin(null, GameMode.Training);
+        localVersus.Pressed += () => Begin(null);
+        GetNode<Godot.Button>("Columns/Modes/Training").Pressed += () => Begin(null, GameMode.Training);
+        GetNode<Godot.Button>("Columns/Modes/Online").Pressed += OpenLobby;
+
+        var udp = GetNode<Godot.Button>("Columns/Modes/Udp");
+        var fake = GetNode<Godot.Button>("Columns/Modes/Fake");
+        udp.Visible = DevTransports;
+        fake.Visible = DevTransports;
         udp.Pressed += () => Begin(MakeUdpTransport());
         fake.Pressed += () => Begin(MakeFakeTransport());
 
-        GetNode<Label>("Buttons/SteamStatus").Text = SteamManager.Available
+        GetNode<Label>("SteamStatus").Text = SteamManager.Available
             ? $"Steam: {SteamManager.PersonaName}"
             : "Steam: not running";
 
-        hostButton = GetNode<Godot.Button>("Buttons/Host");
-        copyButton = GetNode<Godot.Button>("Buttons/Copy");
-        joinButton = GetNode<Godot.Button>("Buttons/Join");
-        inviteButton = GetNode<Godot.Button>("Buttons/Invite");
-        startButton = GetNode<Godot.Button>("Buttons/Start");
-        codeEntry = GetNode<LineEdit>("Buttons/CodeEntry");
-        lobbyStatus = GetNode<Label>("Buttons/LobbyStatus");
+        // Both pages cover the screen, so the menu goes away rather than staying clickable
+        // underneath. Each page reports that it closed and has no idea what opened it.
+        options.Closed += ShowColumns;
+        lobby.Closed += ShowColumns;
 
-        hostButton.Pressed += OnHost;
-        joinButton.Pressed += OnJoin;
-        // All three need a lobby, and their Disabled state is a frame behind — Godot handles input
-        // before _Process, so a click is judged against last frame's answer.
-        copyButton.Disabled = true;
-        inviteButton.Disabled = true;
-        startButton.Disabled = true;
+        lobby.InputDelay = InputDelay;
+        lobby.StartMatch = (transport, delay) => Begin(transport, delay);
 
-        copyButton.Pressed += () =>
-        {
-            if (SteamLobby.Current != null) DisplayServer.ClipboardSet(SteamLobby.Current.Code.ToString());
-        };
-        inviteButton.Pressed += () => SteamLobby.Current?.OpenInviteOverlay();
-        startButton.Pressed += OnStart;
-        GetNode<Godot.Button>("Buttons/Paste").Pressed += () => codeEntry.Text = DisplayServer.ClipboardGet();
-
-        if (!SteamManager.Available)
-        {
-            hostButton.Disabled = true;
-            joinButton.Disabled = true;
-            lobbyStatus.Text = "Steam isn't running, so lobbies are unavailable.";
-        }
-
-        buttons = GetNode<Control>("Buttons");
-        options = GetNode<OptionsMenu>("OptionsMenu");
-        GetNode<Godot.Button>("Buttons/Options").Pressed += OpenOptions;
-        options.Closed += buttons.Show;
-
-        local.GrabFocus();
+        FocusFollowsMouse.Apply(this);
+        modes.Hide();
+        play.GrabFocus();
     }
 
-    async void OnHost()
+    // Escape closes the mode column. The pages handle their own, so this stands down while one is up.
+    public override void _Input(InputEvent e)
     {
-        hostButton.Disabled = true;
-        lobbyStatus.Text = "Creating a lobby...";
-        if (await SteamLobby.Host() == null) lobbyStatus.Text = "Steam wouldn't make a lobby.";
-        hostButton.Disabled = false;
+        if (options.Visible || lobby.Visible || !modes.Visible) return;
+        if (!e.IsActionPressed("ui_cancel")) return;
+
+        modes.Hide();
+        play.GrabFocus();
+        GetViewport().SetInputAsHandled();
     }
 
-    async void OnJoin()
+    void ShowModes()
     {
-        if (!ulong.TryParse(codeEntry.Text.Trim(), out ulong code))
-        {
-            lobbyStatus.Text = "That doesn't look like a lobby code.";
-            return;
-        }
-
-        joinButton.Disabled = true;
-        lobbyStatus.Text = "Joining...";
-        if (await SteamLobby.Join(code) == null)
-            lobbyStatus.Text = "Couldn't join — wrong code, lobby closed, or already full.";
-        joinButton.Disabled = false;
+        modes.Show();
+        localVersus.GrabFocus();
     }
 
-    // Polled rather than event-driven. Only runs while the menu is up, and reading the lobby hits
-    // the Steam client's local cache rather than the network.
+    void ShowColumns()
+    {
+        columns.Show();
+        play.GrabFocus();
+    }
+
+    void OpenOptions()
+    {
+        columns.Hide();
+        options.Open();
+    }
+
+    void OpenLobby()
+    {
+        columns.Hide();
+        lobby.Open();
+    }
+
+    // An accepted invite joins a lobby with nothing on screen asking for one, so the page has to
+    // come up by itself or the player is in a lobby they can't see.
     public override void _Process(double delta)
     {
-        // Both need a lobby to act on, and one can appear without the menu doing anything — an
-        // accepted invite joins in the background.
-        SteamLobby lobby = SteamLobby.Current;
-        copyButton.Disabled = lobby == null;
-        inviteButton.Disabled = lobby == null;
-        // Only the host starts it, and only once there's someone to play.
-        startButton.Disabled = lobby == null || !lobby.IsHost || !lobby.IsFull;
-        if (lobby == null) return;
-
-        lobbyStatus.Text = $"Lobby {lobby.Code}\n{lobby.MemberNames()}\n"
-            + $"You are player {lobby.LocalPlayerNumber}"
-            + (lobby.IsFull ? "" : " — waiting for an opponent");
-
-        // Both sides land here: the host from its own button, the other on seeing the lobby say so.
-        if ((announced || lobby.MatchStarted) && !starting)
-            TryStart(lobby);
-    }
-
-    // `starting` is set last, so a throw in here is retried next frame rather than wedging the menu
-    // behind its own guard.
-    void TryStart(SteamLobby lobby)
-    {
-        try
-        {
-            // The host's number, so both sides prime the same frames. Falls back to our own only on
-            // the host, where the two are the same value anyway.
-            int delay = lobby.AgreedInputDelay >= 0 ? lobby.AgreedInputDelay : InputDelay;
-
-            lobby.SealForMatch();
-            Begin(new NetTransport(new SteamChannel(lobby)), delay);
-            starting = true;
-        }
-        catch (System.Exception e)
-        {
-            // Retried every frame from here on, so only say it the first time.
-            if (startFailure) return;
-            startFailure = true;
-            GD.PushError($"Couldn't start the match ({e.Message}). Retrying each frame.");
-        }
+        if (SteamLobby.Current != null && !lobby.Visible) OpenLobby();
     }
 
     // Built by hand rather than with ChangeSceneToFile so the setup is in place before anything in
