@@ -96,18 +96,6 @@ custom_minimum_size = Vector2(220, 40)
 layout_mode = 2
 text = "Fake Connection"
 
-[node name="SteamStatus" type="Label" parent="."]
-layout_mode = 1
-anchors_preset = 2
-anchor_top = 1.0
-anchor_bottom = 1.0
-offset_left = 80.0
-offset_top = -56.0
-offset_right = 480.0
-offset_bottom = -32.0
-grow_vertical = 0
-text = "Steam: ..."
-
 [node name="Lobby" parent="." instance=ExtResource("3_lobby")]
 visible = false
 layout_mode = 1

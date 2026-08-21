@@ -28,13 +28,14 @@ public partial class MainMenu : Control
     // anything a player sees.
     [Export] public bool DevTransports = false;
 
-    Control columns, modes;
+    Control title, columns, modes;
     Godot.Button play, localVersus;
     OptionsMenu options;
     LobbyMenu lobby;
 
     public override void _Ready()
     {
+        title = GetNode<Control>("Title");
         columns = GetNode<Control>("Columns");
         modes = GetNode<Control>("Columns/Modes");
         play = GetNode<Godot.Button>("Columns/Main/Play");
@@ -42,7 +43,7 @@ public partial class MainMenu : Control
         options = GetNode<OptionsMenu>("OptionsMenu");
         lobby = GetNode<LobbyMenu>("Lobby");
 
-        play.Pressed += ShowModes;
+        play.Pressed += ToggleModes;
         GetNode<Godot.Button>("Columns/Main/Options").Pressed += OpenOptions;
         GetNode<Godot.Button>("Columns/Main/Quit").Pressed += () => GetTree().Quit();
 
@@ -57,14 +58,10 @@ public partial class MainMenu : Control
         udp.Pressed += () => Begin(MakeUdpTransport());
         fake.Pressed += () => Begin(MakeFakeTransport());
 
-        GetNode<Label>("SteamStatus").Text = SteamManager.Available
-            ? $"Steam: {SteamManager.PersonaName}"
-            : "Steam: not running";
-
         // Both pages cover the screen, so the menu goes away rather than staying clickable
         // underneath. Each page reports that it closed and has no idea what opened it.
-        options.Closed += ShowColumns;
-        lobby.Closed += ShowColumns;
+        options.Closed += ShowFrontPage;
+        lobby.Closed += ShowFrontPage;
 
         lobby.InputDelay = InputDelay;
         lobby.StartMatch = (transport, delay) => Begin(transport, delay);
@@ -85,27 +82,46 @@ public partial class MainMenu : Control
         GetViewport().SetInputAsHandled();
     }
 
-    void ShowModes()
+    // Play is a toggle, so the second column closes the same way it opened.
+    void ToggleModes()
     {
+        if (modes.Visible)
+        {
+            modes.Hide();
+            return;
+        }
+
         modes.Show();
         localVersus.GrabFocus();
     }
 
-    void ShowColumns()
+    // Coming back always lands on the three buttons rather than whatever column was open when the
+    // page changed.
+    void ShowFrontPage()
     {
+        modes.Hide();
         columns.Show();
+        title.Show();
         play.GrabFocus();
+    }
+
+    // The pages cover the screen but don't all paint a background, so the title has to go with the
+    // buttons rather than sit on top of whatever opened.
+    void HideFrontPage()
+    {
+        columns.Hide();
+        title.Hide();
     }
 
     void OpenOptions()
     {
-        columns.Hide();
+        HideFrontPage();
         options.Open();
     }
 
     void OpenLobby()
     {
-        columns.Hide();
+        HideFrontPage();
         lobby.Open();
     }
 

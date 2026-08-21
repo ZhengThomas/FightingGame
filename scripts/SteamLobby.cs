@@ -1,4 +1,3 @@
-using System.Collections.Generic;
 using System.Threading.Tasks;
 using Steamworks;
 using Steamworks.Data;
@@ -128,13 +127,14 @@ public class SteamLobby
         if (Current == this) Current = null;
     }
 
-    // Who's in here, for showing on the menu.
-    public string MemberNames()
+    // Who's sitting in a slot — 1 is the host, 2 is whoever joined — or null if it's empty. Both
+    // sides get the same answer for the same number, since the host is Steam's opinion rather than
+    // each machine's.
+    public string NameOfPlayer(int number)
     {
         ulong owner = lobby.Owner.Id.Value;
-        var names = new List<string>();
         foreach (Friend member in lobby.Members)
-            names.Add(member.Id.Value == owner ? $"{member.Name} (host)" : member.Name);
-        return string.Join(", ", names);
+            if (member.Id.Value == owner == (number == 1)) return member.Name;
+        return null;
     }
 }
