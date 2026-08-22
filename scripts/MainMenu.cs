@@ -28,7 +28,7 @@ public partial class MainMenu : Control
     // anything a player sees.
     [Export] public bool DevTransports = false;
 
-    Control title, columns, modes;
+    Control title, main, modes;
     Godot.Button play, localVersus;
     OptionsMenu options;
     LobbyMenu lobby;
@@ -36,23 +36,23 @@ public partial class MainMenu : Control
     public override void _Ready()
     {
         title = GetNode<Control>("Title");
-        columns = GetNode<Control>("Columns");
-        modes = GetNode<Control>("Columns/Modes");
-        play = GetNode<Godot.Button>("Columns/Main/Play");
-        localVersus = GetNode<Godot.Button>("Columns/Modes/Local");
+        main = GetNode<Control>("Main");
+        modes = GetNode<Control>("Main/PlayRow/ModesSlot/Modes");
+        play = GetNode<Godot.Button>("Main/PlayRow/Play");
+        localVersus = GetNode<Godot.Button>("Main/PlayRow/ModesSlot/Modes/Local");
         options = GetNode<OptionsMenu>("OptionsMenu");
         lobby = GetNode<LobbyMenu>("Lobby");
 
         play.Pressed += ToggleModes;
-        GetNode<Godot.Button>("Columns/Main/Options").Pressed += OpenOptions;
-        GetNode<Godot.Button>("Columns/Main/Quit").Pressed += () => GetTree().Quit();
+        GetNode<Godot.Button>("Main/Options").Pressed += OpenOptions;
+        GetNode<Godot.Button>("Main/Quit").Pressed += () => GetTree().Quit();
 
         localVersus.Pressed += () => Begin(null);
-        GetNode<Godot.Button>("Columns/Modes/Training").Pressed += () => Begin(null, GameMode.Training);
-        GetNode<Godot.Button>("Columns/Modes/Online").Pressed += OpenLobby;
+        GetNode<Godot.Button>("Main/PlayRow/ModesSlot/Modes/Training").Pressed += () => Begin(null, GameMode.Training);
+        GetNode<Godot.Button>("Main/PlayRow/ModesSlot/Modes/Online").Pressed += OpenLobby;
 
-        var udp = GetNode<Godot.Button>("Columns/Modes/Udp");
-        var fake = GetNode<Godot.Button>("Columns/Modes/Fake");
+        var udp = GetNode<Godot.Button>("Main/PlayRow/ModesSlot/Modes/Udp");
+        var fake = GetNode<Godot.Button>("Main/PlayRow/ModesSlot/Modes/Fake");
         udp.Visible = DevTransports;
         fake.Visible = DevTransports;
         udp.Pressed += () => Begin(MakeUdpTransport());
@@ -100,7 +100,7 @@ public partial class MainMenu : Control
     void ShowFrontPage()
     {
         modes.Hide();
-        columns.Show();
+        main.Show();
         title.Show();
         play.GrabFocus();
     }
@@ -109,7 +109,7 @@ public partial class MainMenu : Control
     // buttons rather than sit on top of whatever opened.
     void HideFrontPage()
     {
-        columns.Hide();
+        main.Hide();
         title.Hide();
     }
 

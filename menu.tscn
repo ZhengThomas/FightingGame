@@ -1,10 +1,10 @@
-[gd_scene format=3]
+[gd_scene format=3 uid="uid://datxtb265odq3"]
 
-[ext_resource type="Script" path="res://scripts/MainMenu.cs" id="1_menu"]
-[ext_resource type="PackedScene" path="res://options_menu.tscn" id="2_options"]
-[ext_resource type="PackedScene" path="res://lobby.tscn" id="3_lobby"]
+[ext_resource type="Script" uid="uid://b1fmp6m262hrx" path="res://scripts/MainMenu.cs" id="1_menu"]
+[ext_resource type="PackedScene" uid="uid://dhj1er1arx6sp" path="res://options_menu.tscn" id="2_options"]
+[ext_resource type="PackedScene" uid="uid://c5sqh25n6seom" path="res://lobby.tscn" id="3_lobby"]
 
-[node name="MainMenu" type="Control"]
+[node name="MainMenu" type="Control" unique_id=221413391]
 layout_mode = 3
 anchors_preset = 15
 anchor_right = 1.0
@@ -13,7 +13,7 @@ grow_horizontal = 2
 grow_vertical = 2
 script = ExtResource("1_menu")
 
-[node name="Background" type="ColorRect" parent="."]
+[node name="Background" type="ColorRect" parent="." unique_id=1902891644]
 layout_mode = 1
 anchors_preset = 15
 anchor_right = 1.0
@@ -22,84 +22,93 @@ grow_horizontal = 2
 grow_vertical = 2
 color = Color(0.09, 0.09, 0.11, 1)
 
-[node name="Title" type="Label" parent="."]
+[node name="Title" type="Label" parent="." unique_id=1297088338]
 layout_mode = 1
-anchors_preset = 0
 offset_left = 80.0
 offset_top = 72.0
 offset_right = 480.0
 offset_bottom = 104.0
 text = "FIGHTING GAME"
 
-[node name="Columns" type="HBoxContainer" parent="."]
+[node name="Main" type="VBoxContainer" parent="." unique_id=989468370]
 layout_mode = 1
 anchors_preset = 4
 anchor_top = 0.5
 anchor_bottom = 0.5
 offset_left = 80.0
 offset_top = -88.0
-offset_right = 800.0
-offset_bottom = 180.0
+offset_right = 588.0
+offset_bottom = 88.0
 grow_vertical = 2
-theme_override_constants/separation = 28
-
-[node name="Main" type="VBoxContainer" parent="Columns"]
-layout_mode = 2
-size_flags_vertical = 0
 theme_override_constants/separation = 16
 
-[node name="Play" type="Button" parent="Columns/Main"]
+[node name="PlayRow" type="HBoxContainer" parent="Main" unique_id=389599337]
+layout_mode = 2
+theme_override_constants/separation = 28
+
+[node name="Play" type="Button" parent="Main/PlayRow" unique_id=770480041]
 custom_minimum_size = Vector2(260, 48)
 layout_mode = 2
 text = "Play"
 
-[node name="Options" type="Button" parent="Columns/Main"]
-custom_minimum_size = Vector2(260, 48)
+[node name="ModesSlot" type="Control" parent="Main/PlayRow" unique_id=1500895856]
+custom_minimum_size = Vector2(220, 0)
 layout_mode = 2
-text = "Options"
+mouse_filter = 2
 
-[node name="Quit" type="Button" parent="Columns/Main"]
-custom_minimum_size = Vector2(260, 48)
-layout_mode = 2
-text = "Quit Game"
-
-[node name="Modes" type="VBoxContainer" parent="Columns"]
-visible = false
-layout_mode = 2
-size_flags_vertical = 0
+[node name="Modes" type="VBoxContainer" parent="Main/PlayRow/ModesSlot" unique_id=1050078792]
+layout_mode = 1
+anchors_preset = -1
+anchor_top = 0.5
+anchor_right = 1.0
+anchor_bottom = 0.5
+grow_horizontal = 2
+grow_vertical = 2
 theme_override_constants/separation = 4
 
-[node name="Local" type="Button" parent="Columns/Modes"]
+[node name="Local" type="Button" parent="Main/PlayRow/ModesSlot/Modes" unique_id=1281960928]
 custom_minimum_size = Vector2(220, 40)
 layout_mode = 2
 text = "Local Versus"
 
-[node name="Online" type="Button" parent="Columns/Modes"]
+[node name="Online" type="Button" parent="Main/PlayRow/ModesSlot/Modes" unique_id=1126794794]
 custom_minimum_size = Vector2(220, 40)
 layout_mode = 2
 text = "Online"
 
-[node name="Training" type="Button" parent="Columns/Modes"]
+[node name="Training" type="Button" parent="Main/PlayRow/ModesSlot/Modes" unique_id=1702258593]
 custom_minimum_size = Vector2(220, 40)
 layout_mode = 2
 text = "Training"
 
-[node name="Udp" type="Button" parent="Columns/Modes"]
+[node name="Udp" type="Button" parent="Main/PlayRow/ModesSlot/Modes" unique_id=1497980360]
 visible = false
 custom_minimum_size = Vector2(220, 40)
 layout_mode = 2
 text = "Network Test"
 
-[node name="Fake" type="Button" parent="Columns/Modes"]
+[node name="Fake" type="Button" parent="Main/PlayRow/ModesSlot/Modes" unique_id=1339060029]
 visible = false
 custom_minimum_size = Vector2(220, 40)
 layout_mode = 2
 text = "Fake Connection"
 
-[node name="Lobby" parent="." instance=ExtResource("3_lobby")]
+[node name="Options" type="Button" parent="Main" unique_id=1950341008]
+custom_minimum_size = Vector2(260, 48)
+layout_mode = 2
+size_flags_horizontal = 0
+text = "Options"
+
+[node name="Quit" type="Button" parent="Main" unique_id=786374868]
+custom_minimum_size = Vector2(260, 48)
+layout_mode = 2
+size_flags_horizontal = 0
+text = "Quit Game"
+
+[node name="Lobby" parent="." unique_id=1572343378 instance=ExtResource("3_lobby")]
 visible = false
 layout_mode = 1
 
-[node name="OptionsMenu" parent="." instance=ExtResource("2_options")]
+[node name="OptionsMenu" parent="." unique_id=777393123 instance=ExtResource("2_options")]
 visible = false
 layout_mode = 1
