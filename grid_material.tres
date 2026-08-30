@@ -1,0 +1,11 @@
+[gd_resource type="ShaderMaterial" load_steps=2 format=3]
+
+[ext_resource type="Shader" uid="uid://csifhdipq5x7" path="res://defualtGridShader.gdshader" id="1_shader"]
+
+[resource]
+shader = ExtResource("1_shader")
+shader_parameter/grid_size = 1.0
+shader_parameter/line_color = Color(0.08, 0.08, 0.08, 1)
+shader_parameter/fill_color = Color(0.7, 0.7, 0.7, 1)
+shader_parameter/line_width = 0.04
+shader_parameter/emission_strength = 1.0

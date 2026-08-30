@@ -8,10 +8,11 @@
 [ext_resource type="PackedScene" uid="uid://lfpeewpqnrfk" path="res://player.tscn" id="4_jka67"]
 [ext_resource type="Script" uid="uid://d0brfe7tnn8dw" path="res://scripts/DebugDraw.cs" id="4_wc5p8"]
 [ext_resource type="Script" uid="uid://biypgpgpadelt" path="res://scripts/HealthBarHud.cs" id="5_4arys"]
+[ext_resource type="PackedScene" uid="uid://dfniyfg0cckip" path="res://train_stage.tscn" id="6_imku0"]
 [ext_resource type="Script" uid="uid://fn2tqsh65fm8" path="res://scripts/MatchManager.cs" id="6_match"]
 [ext_resource type="Script" uid="uid://q3igickf8y0f" path="res://scripts/MatchDriver.cs" id="7_driver"]
 [ext_resource type="PackedScene" path="res://match_over_menu.tscn" id="8_overmenu"]
-[ext_resource type="PackedScene" path="res://pause_menu.tscn" id="9_pause"]
+[ext_resource type="PackedScene" uid="uid://bcmoows3wxra3" path="res://pause_menu.tscn" id="9_pause"]
 
 [sub_resource type="Environment" id="Environment_s68cd"]
 
@@ -128,8 +129,12 @@ environment = SubResource("Environment_s68cd")
 
 [node name="world" type="Node3D" parent="." unique_id=771471437]
 
+[node name="Train stage" parent="world" unique_id=1621149964 instance=ExtResource("6_imku0")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.038414955, -0.84770906, 0.05919075)
+
 [node name="walls and floor" type="Node3D" parent="world" unique_id=201691804]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, -0.5975033, 0)
+visible = false
 
 [node name="CSGBox3D" type="CSGBox3D" parent="world/walls and floor" unique_id=1567150229]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.014403343, -0.49467647, -0.0009446144)
@@ -164,11 +169,11 @@ PlayerNumber = 2
 [node name="MatchDriver" type="Node" parent="." unique_id=1815988756]
 script = ExtResource("7_driver")
 
-[node name="MatchOverMenu" parent="." instance=ExtResource("8_overmenu")]
+[node name="MatchOverMenu" parent="." unique_id=1763985282 instance=ExtResource("8_overmenu")]
 
 [node name="DebugLayer" type="CanvasLayer" parent="." unique_id=273675407]
 
 [node name="DebugDraw" type="Node2D" parent="DebugLayer" unique_id=2093599107]
 script = ExtResource("4_wc5p8")
 
-[node name="PauseMenu" parent="." instance=ExtResource("9_pause")]
+[node name="PauseMenu" parent="." unique_id=1108221532 instance=ExtResource("9_pause")]
