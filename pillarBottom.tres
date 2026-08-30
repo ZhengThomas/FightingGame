@@ -1,7 +1,6 @@
 [gd_resource type="StandardMaterial3D" format=3 uid="uid://dd2gepj13wu7k"]
 
 [resource]
-shading_mode = 0
 vertex_color_use_as_albedo = true
 albedo_color = Color(0.5069202, 0.5069203, 0.50692004, 1)
 texture_filter = 0

@@ -7,7 +7,7 @@
 [ext_resource type="Material" uid="uid://dd2gepj13wu7k" path="res://pillarBottom.tres" id="5_1kfdl"]
 
 [sub_resource type="StandardMaterial3D" id="StandardMaterial3D_c8166"]
-shading_mode = 0
+shading_mode = 1
 vertex_color_use_as_albedo = true
 albedo_texture = ExtResource("2_c8166")
 uv1_triplanar = true
@@ -15,18 +15,18 @@ uv1_world_triplanar = true
 texture_filter = 0
 
 [sub_resource type="StandardMaterial3D" id="StandardMaterial3D_re6y5"]
-shading_mode = 0
+shading_mode = 1
 vertex_color_use_as_albedo = true
 albedo_texture = ExtResource("3_6m6qm")
 
 [sub_resource type="StandardMaterial3D" id="StandardMaterial3D_6m6qm"]
-shading_mode = 0
+shading_mode = 1
 vertex_color_use_as_albedo = true
 albedo_texture = ExtResource("3_c8166")
 texture_filter = 0
 
 [sub_resource type="StandardMaterial3D" id="StandardMaterial3D_3sth0"]
-shading_mode = 0
+shading_mode = 1
 vertex_color_use_as_albedo = true
 albedo_texture = ExtResource("3_c8166")
 uv1_scale = Vector3(0.1, 0.1, 0.1)
@@ -35,7 +35,7 @@ uv1_world_triplanar = true
 texture_filter = 0
 
 [sub_resource type="StandardMaterial3D" id="StandardMaterial3D_0gcs3"]
-shading_mode = 0
+shading_mode = 1
 vertex_color_use_as_albedo = true
 albedo_texture = ExtResource("3_c8166")
 texture_filter = 0
