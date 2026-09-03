@@ -1,0 +1,27 @@
+[gd_scene format=3 uid="uid://du1hh3mpsudsq"]
+
+[ext_resource type="Script" uid="uid://dp2ymydadqtpj" path="res://scripts/FrameVfx.cs" id="1_framevfx"]
+[ext_resource type="Texture2D" uid="uid://db5v61rydab7x" path="res://sprites/vfx/ring.png" id="2_ring"]
+
+[sub_resource type="Curve" id="Curve_scale"]
+_limits = [0.1, 2.0, 0.0, 1.0]
+_data = [Vector2(0, 0.2), 0.0, 4.0, 0, 0, Vector2(1, 1.5), 0.0, 0.0, 0, 0]
+point_count = 2
+
+[sub_resource type="Curve" id="Curve_alpha"]
+_data = [Vector2(0, 0.65190524), 0.0, 0.0, 0, 0, Vector2(0.33474576, 0.75008583), 0.0, 0.0, 0, 0, Vector2(1, 0), 0.0, 0.0, 0, 0]
+point_count = 3
+
+[node name="DoubleJumpRing" type="Node3D" unique_id=1335122501]
+visible = false
+script = ExtResource("1_framevfx")
+DurationFrames = 8
+ScaleCurve = SubResource("Curve_scale")
+AlphaCurve = SubResource("Curve_alpha")
+
+[node name="Ring" type="Sprite3D" parent="." unique_id=1572409285]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.15, 0)
+pixel_size = 0.004
+billboard = 1
+texture_filter = 1
+texture = ExtResource("2_ring")

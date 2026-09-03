@@ -13,6 +13,7 @@
 [ext_resource type="Script" uid="uid://q3igickf8y0f" path="res://scripts/MatchDriver.cs" id="7_driver"]
 [ext_resource type="PackedScene" path="res://match_over_menu.tscn" id="8_overmenu"]
 [ext_resource type="PackedScene" uid="uid://bcmoows3wxra3" path="res://pause_menu.tscn" id="9_pause"]
+[ext_resource type="Script" path="res://scripts/VfxManager.cs" id="10_vfx"]
 
 [sub_resource type="Environment" id="Environment_imku0"]
 tonemap_mode = 3
@@ -159,6 +160,9 @@ material = SubResource("ShaderMaterial_8h4pb")
 transform = Transform3D(-4.371139e-08, -1, 0, 1, -4.371139e-08, 0, 0, 0, 1, -10, 4.339, 0)
 size = Vector3(10, 0.5, 15)
 material = SubResource("ShaderMaterial_8h4pb")
+
+[node name="VfxManager" type="Node3D" parent="." unique_id=1815988757]
+script = ExtResource("10_vfx")
 
 [node name="MatchManager" type="Node" parent="." unique_id=1815988755]
 script = ExtResource("6_match")

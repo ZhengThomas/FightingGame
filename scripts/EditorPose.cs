@@ -16,11 +16,25 @@ public partial class EditorPose : Node3D
     private Node3D slashPreview;
     private string slashPreviewPath = "";
 
+    private string vfxScene = "";
+    private int vfxFrame = 0;
+    // The instanced state VFX (jump ring, dash trail, ...) and which scene it is.
+    private FrameVfx vfxPreview;
+    private string vfxPreviewPath = "";
+
     // Name of the animation clip to hold. Use "List Animations" below to see valid names.
     [Export] public string Animation { get => animation; set { animation = value; ApplyPose(); } }
     // Frame within the clip (game ticks, matching Startup/Active counts). Frame 0 = start.
     // Converted to seconds with the sim tick rate, exactly like the game advances animation.
     [Export] public int Frame { get => frame; set { frame = value; ApplyPose(); } }
+
+    // A state VFX scene (res://sprites/vfx/*.tscn) to hold on screen for positioning. These aren't
+    // tied to an attack, so unlike the slash preview there's nothing to look up from the animation
+    // — scrub VfxFrame by hand to see any point of the effect.
+    [Export(PropertyHint.File, "*.tscn")] public string PreviewVfxScene { get => vfxScene; set { vfxScene = value; ApplyPose(); } }
+    // Frame within the effect, 0 to its own DurationFrames. Progress is derived from that, so the
+    // shape you see here is exactly what that frame looks like in game.
+    [Export] public int VfxFrame { get => vfxFrame; set { vfxFrame = value; ApplyPose(); } }
 
     // Toggle to re-apply the pose (auto-resets). Handy after reopening the scene.
     [Export] public bool ApplyNow { get => false; set { if (value) ApplyPose(); } }
@@ -47,6 +61,7 @@ public partial class EditorPose : Node3D
 
         ApplyModelPose();
         UpdateSlashPreview();
+        UpdateVfxPreview();
     }
 
     private void ApplyModelPose()
@@ -123,6 +138,45 @@ public partial class EditorPose : Node3D
             float alpha = hasVfx ? move.Vfx.AlphaAt(frame - (move.Startup + 1)) : 0f;
             PlayerVfx.ApplyOpacity(slashPreview, "opacity", alpha);
         }
+    }
+
+    // Holds a state VFX at VfxFrame so it can be positioned and sized against the real character.
+    // Parented to the Player (not the Model) to match runtime, where PlayerVfx adds these to itself.
+    private void UpdateVfxPreview()
+    {
+        if (!Engine.IsEditorHint() || !IsInsideTree())
+            return;
+
+        Node parent = GetParent();
+        if (parent == null)
+            return;
+
+        if (vfxPreview == null || !IsInstanceValid(vfxPreview) || vfxPreviewPath != vfxScene)
+        {
+            foreach (Node child in parent.GetChildren())
+                if (child.Name == "__VfxPreview")
+                    child.QueueFree();
+
+            vfxPreview = null;
+            vfxPreviewPath = vfxScene;
+
+            if (!string.IsNullOrEmpty(vfxScene))
+            {
+                PackedScene packed = GD.Load<PackedScene>(vfxScene);
+                vfxPreview = packed?.Instantiate() as FrameVfx;
+                if (vfxPreview == null)
+                {
+                    GD.PushWarning($"EditorPose: '{vfxScene}' is missing or its root is not a FrameVfx.");
+                    return;
+                }
+
+                vfxPreview.Name = "__VfxPreview";
+                parent.AddChild(vfxPreview); // no owner set -> not saved into the scene file
+            }
+        }
+
+        if (vfxPreview != null && IsInstanceValid(vfxPreview) && vfxPreview.DurationFrames > 0)
+            vfxPreview.SetProgress((float)vfxFrame / vfxPreview.DurationFrames);
     }
 
     private void PrintAnimationList()

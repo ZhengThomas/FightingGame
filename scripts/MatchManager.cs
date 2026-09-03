@@ -189,6 +189,9 @@ public partial class MatchManager : Node
 		next.Match.Flow = next_flow;
 
 		RestoreSnapshot(next);
+		// Effects aren't snapshotted, so a round reset has to drop them explicitly or last round's
+		// still-playing visuals carry over into the new one.
+		VfxManager.Current?.Reset();
 		Teleports++;
 	}
 

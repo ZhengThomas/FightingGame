@@ -182,6 +182,14 @@ public partial class Player : Node3D
     public ActiveMoveState CurrentMove => currentMove;
     public PhysicsState Physics => physics;
     public int AirDashDirection => jump.AirDashDirection; // +1/-1, the locked-in airdash direction
+    // Jump/dash counters, exposed so visuals can derive effect progress without their own state.
+    // All of these live in JumpState, which is snapshotted, so anything driven off them is
+    // rollback-consistent for free.
+    public bool HasDoubleJump => jump.HasDoubleJump;
+    public int FramesSinceLastJump => jump.FramesSinceLastJump;
+    public int AirdashFrame => jump.AirdashFrame;
+    public int JumpSquatFrame => jump.JumpSquatFrame;
+    public int LandingFrame => jump.LandingFrame;
     // Bumped every hit/block so the animator can replay reaction clips on re-hit in the same state.
     // Snapshotted for rollback; visuals poll this instead of listening to transition events.
     public int ReactionFlashId => reactionFlashId;
@@ -317,6 +325,18 @@ public partial class Player : Node3D
                 Execute = () => StartMove(Moveset.FowardGrab, PlayerState.GrabOccurring),
             },
         };
+    }
+
+    // Ask the presentation layer to show a one-shot effect at this player's current position.
+    //
+    // Safe to call from sim code even though it reaches outside the sim: the id is derived from
+    // frame + player, so a rollback resim re-requesting the same event is deduped into a no-op
+    // rather than spawning a second copy. Nothing about the effect is stored here or snapshotted.
+    void RequestVfx(VfxKind kind)
+    {
+        int id = PlayerNumber * 1000000 + (Match?.FrameCount ?? 0);
+        int facing = GetFacing() == FacingDirection.Right ? 1 : -1;
+        VfxManager.Current?.Request(kind, id, SimX, SimY, facing);
     }
 
     // Pack every sim-critical field on this Player into a PlayerSnapshot for rollback storage.
@@ -1204,6 +1224,7 @@ public partial class Player : Node3D
             if (inAir)
             {
                 jump.HasDoubleJump = false;
+                RequestVfx(VfxKind.DoubleJumpRing);
                 updateFacing(true);
             }
             TransitionTo(PlayerState.Jumping);
@@ -1488,6 +1509,7 @@ public partial class Player : Node3D
 
             Jump(Stats.DoubleJumpForce, jumptype);
             jump.HasDoubleJump = false;
+            RequestVfx(VfxKind.DoubleJumpRing);
         }
         else if ((ForwardDashInputted() || BackDashInputted()) && jump.HasAirdash && jump.FramesSinceLastJump >= Stats.FramesUntilActionableAfterJump)
         {
