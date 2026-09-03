@@ -2,20 +2,17 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://d3d5mj5kcm4o"
-path.s3tc="res://.godot/imported/Train stage_TrainCar.png-a46e75df856a28499d1269f9f977b181.s3tc.ctex"
+uid="uid://b54ahvfhk17e0"
+path.s3tc="res://.godot/imported/groundTileset.png-d94be794019a03f94e6d58cf5b957b0a.s3tc.ctex"
 metadata={
 "imported_formats": ["s3tc_bptc"],
 "vram_texture": true
 }
-generator_parameters={
-"md5": "03cabfe8e4ba478b25b9c7b89d9c0805"
-}
 
 [deps]
 
-source_file="res://Train stage_TrainCar.png"
-dest_files=["res://.godot/imported/Train stage_TrainCar.png-a46e75df856a28499d1269f9f977b181.s3tc.ctex"]
+source_file="res://models/groundTileset.png"
+dest_files=["res://.godot/imported/groundTileset.png-d94be794019a03f94e6d58cf5b957b0a.s3tc.ctex"]
 
 [params]
 

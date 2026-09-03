@@ -1,0 +1,10 @@
+[gd_resource type="StandardMaterial3D" format=3 uid="uid://bg03xxu6p8mir"]
+
+[ext_resource type="Texture2D" uid="uid://ceumr8lwhxyex" path="res://models/platform edge.png" id="1_0fd5s"]
+
+[resource]
+resource_name = "YELLOW"
+cull_mode = 2
+shading_mode = 0
+albedo_texture = ExtResource("1_0fd5s")
+texture_filter = 2

@@ -1,0 +1,9 @@
+[gd_resource type="StandardMaterial3D" format=3 uid="uid://cwcnxx7ccy42b"]
+
+[ext_resource type="Texture2D" uid="uid://c2nngrxmr6kk6" path="res://models/Train stage_Untitled_2.png" id="1_7lmxd"]
+
+[resource]
+resource_name = "Pop Can"
+cull_mode = 2
+shading_mode = 0
+albedo_texture = ExtResource("1_7lmxd")

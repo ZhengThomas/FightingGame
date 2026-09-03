@@ -14,15 +14,11 @@
 [ext_resource type="PackedScene" path="res://match_over_menu.tscn" id="8_overmenu"]
 [ext_resource type="PackedScene" uid="uid://bcmoows3wxra3" path="res://pause_menu.tscn" id="9_pause"]
 
-[sub_resource type="Sky" id="Sky_stage"]
-
-[sub_resource type="Environment" id="Environment_s68cd"]
-background_mode = 2
-sky = SubResource("Sky_stage")
-ambient_light_source = 2
-ambient_light_color = Color(0.42, 0.46, 0.55, 1)
-ambient_light_energy = 0.3
-tonemap_mode = 2
+[sub_resource type="Environment" id="Environment_imku0"]
+tonemap_mode = 3
+glow_bloom = 0.2
+fog_light_color = Color(0.71841526, 0.81318796, 0.9256508, 1)
+fog_density = 0.005
 
 [sub_resource type="ShaderMaterial" id="ShaderMaterial_jr3p7"]
 render_priority = 0
@@ -52,6 +48,9 @@ shader_parameter/line_width = 0.04
 shader_parameter/emission_strength = 1.0
 
 [node name="ActualFighting" type="Node3D" unique_id=2120865207]
+
+[node name="WorldEnvironment" type="WorldEnvironment" parent="." unique_id=246891526]
+environment = SubResource("Environment_imku0")
 
 [node name="Camera3D" type="Camera3D" parent="." unique_id=226205522]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1, 4)
@@ -131,16 +130,6 @@ P1 = NodePath("../../MatchManager/Player")
 P2 = NodePath("../../MatchManager/Player2")
 TrailDelayFrames = 50
 TrailFollowPerFrame = 0.015
-
-[node name="WorldEnvironment" type="WorldEnvironment" parent="." unique_id=1620655634]
-environment = SubResource("Environment_s68cd")
-
-[node name="DirectionalLight3D" type="DirectionalLight3D" parent="." unique_id=1620655635]
-transform = Transform3D(0.866, 0.353, -0.353, 0, 0.707, 0.707, 0.5, -0.612, 0.612, 0, 6, 0)
-visible = false
-light_color = Color(0.9411765, 0.9411765, 1, 1)
-light_energy = 0.8
-shadow_enabled = true
 
 [node name="world" type="Node3D" parent="." unique_id=771471437]
 

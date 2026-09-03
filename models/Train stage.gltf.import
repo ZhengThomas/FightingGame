@@ -3,13 +3,13 @@
 importer="scene"
 importer_version=1
 type="PackedScene"
-uid="uid://drjm4ekvjap3a"
-path="res://.godot/imported/Train stage.glb-bf3c8e022d7856e69eb2dd7a5a22d458.scn"
+uid="uid://5jwgold6g5kl"
+path="res://.godot/imported/Train stage.gltf-406e2f943301661a55d83bc08f252e9d.scn"
 
 [deps]
 
-source_file="res://Train stage.glb"
-dest_files=["res://.godot/imported/Train stage.glb-bf3c8e022d7856e69eb2dd7a5a22d458.scn"]
+source_file="res://models/Train stage.gltf"
+dest_files=["res://.godot/imported/Train stage.gltf-406e2f943301661a55d83bc08f252e9d.scn"]
 
 [params]
 

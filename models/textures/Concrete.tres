@@ -1,0 +1,10 @@
+[gd_resource type="StandardMaterial3D" format=3 uid="uid://cffps1sxjg0f"]
+
+[ext_resource type="Texture2D" uid="uid://cxudtdexfa7v" path="res://models/wall2.png" id="1_ywmb3"]
+
+[resource]
+resource_name = "Concrete"
+cull_mode = 2
+shading_mode = 0
+albedo_texture = ExtResource("1_ywmb3")
+texture_filter = 2

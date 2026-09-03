@@ -1,0 +1,10 @@
+[gd_resource type="StandardMaterial3D" format=3 uid="uid://bdpd3ab7vwran"]
+
+[ext_resource type="Texture2D" uid="uid://b54ahvfhk17e0" path="res://models/groundTileset.png" id="1_msi30"]
+
+[resource]
+resource_name = "floor"
+cull_mode = 2
+shading_mode = 0
+albedo_texture = ExtResource("1_msi30")
+texture_filter = 2

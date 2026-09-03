@@ -1,0 +1,10 @@
+[gd_resource type="StandardMaterial3D" format=3 uid="uid://wafx2410advd"]
+
+[ext_resource type="Texture2D" uid="uid://ccrjnu5327dra" path="res://models/Train stage_TrainCar.png" id="1_4dcwc"]
+
+[resource]
+resource_name = "TrainCar"
+cull_mode = 2
+shading_mode = 0
+albedo_texture = ExtResource("1_4dcwc")
+texture_filter = 2

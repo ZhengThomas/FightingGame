@@ -1,0 +1,9 @@
+[gd_resource type="StandardMaterial3D" format=3 uid="uid://cjr3s67wnxv2m"]
+
+[ext_resource type="Texture2D" uid="uid://4vxxjgth7w3l" path="res://models/Train stage_GarbageCan.png" id="1_tgdqy"]
+
+[resource]
+resource_name = "Garbage"
+cull_mode = 2
+shading_mode = 0
+albedo_texture = ExtResource("1_tgdqy")

@@ -1,0 +1,9 @@
+[gd_resource type="StandardMaterial3D" format=3 uid="uid://cj6chroqmdy1l"]
+
+[ext_resource type="Texture2D" uid="uid://c5e0ic8ov4tfo" path="res://models/Train stage_Sign.png" id="1_6fk6y"]
+
+[resource]
+resource_name = "Sign"
+cull_mode = 2
+shading_mode = 0
+albedo_texture = ExtResource("1_6fk6y")
