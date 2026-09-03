@@ -2,4 +2,4 @@
 
 [ext_resource type="PackedScene" uid="uid://5jwgold6g5kl" path="res://models/Train stage.gltf" id="1_ya0pq"]
 
-[node name="Train stage" unique_id=1259902202 instance=ExtResource("1_ya0pq")]
+[node name="Train stage" unique_id=855260982 instance=ExtResource("1_ya0pq")]
