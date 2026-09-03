@@ -52,6 +52,7 @@ public partial class VfxManager : Node3D
         public int Id;          // 0 = free
         public int SpawnFrame;  // SimFrame the effect started on
         public int Facing;
+        public int OwnerNumber; // player that requested it, for FollowSpawner effects
     }
 
     Slot[][] pools;
@@ -94,7 +95,7 @@ public partial class VfxManager : Node3D
                     break;
                 }
                 AddChild(node);
-                node.SetProgress(-1f);
+                node.SetFrame(-1);
                 slots[i] = new Slot { Node = node };
             }
             pools[kind] = slots;
@@ -105,7 +106,7 @@ public partial class VfxManager : Node3D
     // which is what makes it safe to call from inside a rollback resim.
     //
     // simX/simY are sim-space (PhysicsScale) coords; the effect stays there for its whole life.
-    public void Request(VfxKind kind, int id, int simX, int simY, int facing = 1)
+    public void Request(VfxKind kind, int id, int simX, int simY, int facing = 1, int ownerNumber = 0)
     {
         if (pools == null || id == 0) return;
 
@@ -131,7 +132,7 @@ public partial class VfxManager : Node3D
             if (s?.Node == null) continue;
 
             int rank = s.Id == 0 ? 0
-                     : (now - s.SpawnFrame >= s.Node.DurationFrames ? 1 : 2);
+                     : (now - s.SpawnFrame >= s.Node.TotalDurationFrames ? 1 : 2);
 
             if (rank < targetRank || (rank == targetRank && target != null && s.SpawnFrame < target.SpawnFrame))
             {
@@ -145,10 +146,16 @@ public partial class VfxManager : Node3D
         target.Id = id;
         target.SpawnFrame = now;
         target.Facing = facing >= 0 ? 1 : -1;
+        target.OwnerNumber = ownerNumber;
 
+        PlaceAt(target.Node, simX, simY);
+        target.Node.SetFrame(0, target.Facing);
+    }
+
+    void PlaceAt(FrameVfx node, int simX, int simY)
+    {
         const float scale = PlayerConstants.PhysicsScale;
-        target.Node.GlobalPosition = new Vector3(simX / scale, simY / scale, GlobalPosition.Z);
-        target.Node.SetProgress(0f, target.Facing);
+        node.GlobalPosition = new Vector3(simX / scale, simY / scale, GlobalPosition.Z);
     }
 
     // Drops every live effect. Called on round reset so last round's effects don't linger.
@@ -161,7 +168,7 @@ public partial class VfxManager : Node3D
             {
                 if (s?.Node == null) continue;
                 s.Id = 0;
-                s.Node.SetProgress(-1f);
+                s.Node.SetFrame(-1);
             }
     }
 
@@ -177,21 +184,29 @@ public partial class VfxManager : Node3D
                 if (s?.Node == null || s.Id == 0) continue;
 
                 int frame = sim - s.SpawnFrame;
-                int duration = s.Node.DurationFrames;
+                int duration = s.Node.TotalDurationFrames;
+
+                // Re-read the owner's position every frame rather than trusting the spawn point.
+                // After a rollback the player is already corrected, so this needs no history.
+                if (s.Node.FollowSpawner && frame >= 0 && frame < duration)
+                {
+                    Player owner = MatchManager.Current?.PlayerFromNumber(s.OwnerNumber);
+                    if (owner != null) PlaceAt(s.Node, owner.SimX, owner.SimY);
+                }
 
                 if (frame < 0)
                 {
                     // Rolled back past this effect's start. Keep the slot: if the event really did
                     // happen, the resim re-requests the same id and it picks up where it was.
-                    s.Node.SetProgress(-1f);
+                    s.Node.SetFrame(-1);
                 }
                 else if (frame < duration)
                 {
-                    s.Node.SetProgress((float)frame / duration, s.Facing);
+                    s.Node.SetFrame(frame, s.Facing);
                 }
                 else
                 {
-                    s.Node.SetProgress(-1f);
+                    s.Node.SetFrame(-1);
                     if (frame >= duration + IdKeepFrames) s.Id = 0;  // id no longer needed for dedup
                 }
             }

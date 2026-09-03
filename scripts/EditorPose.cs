@@ -32,8 +32,8 @@ public partial class EditorPose : Node3D
     // tied to an attack, so unlike the slash preview there's nothing to look up from the animation
     // — scrub VfxFrame by hand to see any point of the effect.
     [Export(PropertyHint.File, "*.tscn")] public string PreviewVfxScene { get => vfxScene; set { vfxScene = value; ApplyPose(); } }
-    // Frame within the effect, 0 to its own DurationFrames. Progress is derived from that, so the
-    // shape you see here is exactly what that frame looks like in game.
+    // Tick within the effect, 0 to its TotalDurationFrames. Handed straight to the effect, so each
+    // part applies its own offset and you see exactly what that tick looks like in game.
     [Export] public int VfxFrame { get => vfxFrame; set { vfxFrame = value; ApplyPose(); } }
 
     // Toggle to re-apply the pose (auto-resets). Handy after reopening the scene.
@@ -175,8 +175,8 @@ public partial class EditorPose : Node3D
             }
         }
 
-        if (vfxPreview != null && IsInstanceValid(vfxPreview) && vfxPreview.DurationFrames > 0)
-            vfxPreview.SetProgress((float)vfxFrame / vfxPreview.DurationFrames);
+        if (vfxPreview != null && IsInstanceValid(vfxPreview))
+            vfxPreview.SetFrame(vfxFrame);
     }
 
     private void PrintAnimationList()

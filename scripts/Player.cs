@@ -336,7 +336,7 @@ public partial class Player : Node3D
     {
         int id = PlayerNumber * 1000000 + (Match?.FrameCount ?? 0);
         int facing = GetFacing() == FacingDirection.Right ? 1 : -1;
-        VfxManager.Current?.Request(kind, id, SimX, SimY, facing);
+        VfxManager.Current?.Request(kind, id, SimX, SimY, facing, PlayerNumber);
     }
 
     // Pack every sim-critical field on this Player into a PlayerSnapshot for rollback storage.

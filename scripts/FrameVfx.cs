@@ -1,59 +1,103 @@
 using Godot;
+using System.Collections.Generic;
 
 // How a one-shot visual looks at a given point in its life. Purely presentational: it holds no
 // timer, never advances itself, and knows nothing about when or why it was started.
 //
-// VfxManager owns the "when" — it pools these and each frame hands every live one a 0..1 progress
-// derived from MatchManager.SimFrame. Because SimFrame stalls during hit pause, effects freeze with
-// the game for free; because none of this is in a snapshot, there is nothing for a rollback to
-// rewind.
+// VfxManager owns the "when" — it pools these and each frame hands every live one the number of
+// ticks since it started. Because that count comes from MatchManager.SimFrame, which stalls during
+// hit pause, effects freeze with the game for free; because none of it is in a snapshot, there is
+// nothing for a rollback to rewind.
 //
-// Shape an effect by drawing ScaleCurve / AlphaCurve in the inspector. A new effect is a new scene
-// with different curves — no code at all.
+// These nest. A FrameVfx with FrameVfx children is a compound effect: the raw tick count is passed
+// down unchanged, and every part works out its own progress from its own StartOffsetFrames and
+// DurationFrames. That's how three rings stagger two frames apart, or smoke outlasts the flash.
+// A part owns the geometry beneath it up to the next nested FrameVfx, so parts never fight over
+// each other's sprites.
+//
+// Shape a part by drawing its curves in the inspector. A new effect is a new scene — no code.
 [Tool]
 public partial class FrameVfx : Node3D
 {
-    // Ticks from spawn to finished. PlayerVfx divides its counter by this to get progress.
+    // Ticks this part waits after the effect starts before it appears. 0 = starts immediately.
+    [Export] public int StartOffsetFrames = 0;
+    // Ticks this part takes to run, once it has started.
     [Export] public int DurationFrames = 15;
 
-    // Progress (0..1) -> multiplier on BaseScale. Left flat/empty means constant BaseScale.
+    // Progress (0..1) -> multiplier on BaseScale. Empty leaves the authored scale alone.
     [Export] public Curve ScaleCurve;
-    // Progress (0..1) -> opacity (0..1). Left empty means fully opaque the whole way.
+    // Progress (0..1) -> opacity (0..1). Empty means fully opaque the whole way.
     [Export] public Curve AlphaCurve;
     // Progress (0..1) -> degrees of spin about Z, times MaxRotationDegrees.
     [Export] public Curve RotationCurve;
 
     [Export] public float BaseScale = 1.0f;
     [Export] public float MaxRotationDegrees = 0f;
-    // Scales the whole effect on X to face the way the character does. Leave off for symmetric art.
+    // Mirrors this part on X to face the way the character does. Leave off for symmetric art.
     [Export] public bool FlipWithFacing = false;
 
-    Node3D visual;
-    GeometryInstance3D[] tinted;
+    // Set on an effect's ROOT to make it track the player that requested it, instead of staying
+    // where it spawned. Reading the player's live position each frame means there is nothing to
+    // store and nothing for a rollback to rewind — a resim just corrects the player and the effect
+    // follows. Facing is still locked at spawn, so a directional effect can't flip mid-play.
+    [Export] public bool FollowSpawner = false;
+
+    // Geometry belonging to this part only — the walk stops at a nested FrameVfx.
+    GeometryInstance3D[] owned;
+    // Nested parts, handed the same raw tick count as this node.
+    FrameVfx[] parts;
+
+    // Ticks from the effect starting to its last part finishing. VfxManager uses this to know when
+    // the whole thing is done, so a long trailing part can't be cut off by a short root.
+    public int TotalDurationFrames
+    {
+        get
+        {
+            EnsureCollected();
+            int total = StartOffsetFrames + DurationFrames;
+            foreach (FrameVfx part in parts)
+                total = Mathf.Max(total, StartOffsetFrames + part.TotalDurationFrames);
+            return total;
+        }
+    }
 
     public override void _Ready()
     {
-        visual = this;
-        tinted = CollectGeometry();
-        Hide();
+        EnsureCollected();
+        SetFrame(-1);   // start hidden
     }
 
-    // progress: 0 on the spawn frame, 1 when finished. Anything outside 0..1 hides the effect.
-    public void SetProgress(float progress, int facing = 1)
+    // frame = ticks since the whole effect started. Negative, or past this part's window, hides it.
+    // Pass the same number to every part; each shifts it by its own offset.
+    public void SetFrame(int frame, int facing = 1)
     {
-        tinted ??= CollectGeometry();
+        EnsureCollected();
 
-        if (progress < 0f || progress > 1f)
+        int local = frame - StartOffsetFrames;
+        bool showing = local >= 0 && local < DurationFrames && DurationFrames > 0;
+
+        if (showing)
+            Apply((float)local / DurationFrames, facing);
+
+        foreach (GeometryInstance3D g in owned)
+            g.Visible = showing;
+
+        // Parts run on the effect's clock, not this part's, so they get the raw count. A part can
+        // therefore still be playing after its parent's own window has closed.
+        foreach (FrameVfx part in parts)
+            part.SetFrame(frame, facing);
+    }
+
+    void Apply(float progress, int facing)
+    {
+        // Only touch the transform when this part actually animates it, so a container's authored
+        // scale/rotation survives being handed a progress.
+        if (ScaleCurve != null || BaseScale != 1.0f || FlipWithFacing)
         {
-            if (Visible) Hide();
-            return;
+            float scale = BaseScale * Sample(ScaleCurve, progress, 1f);
+            float flip = (FlipWithFacing && facing < 0) ? -1f : 1f;
+            Scale = new Vector3(scale * flip, scale, scale);
         }
-
-        if (!Visible) Show();
-
-        float scale = BaseScale * Sample(ScaleCurve, progress, 1f);
-        float flip = (FlipWithFacing && facing < 0) ? -1f : 1f;
-        Scale = new Vector3(scale * flip, scale, scale);
 
         if (MaxRotationDegrees != 0f)
             Rotation = new Vector3(0f, 0f, Mathf.DegToRad(MaxRotationDegrees * Sample(RotationCurve, progress, 0f)));
@@ -66,11 +110,11 @@ public partial class FrameVfx : Node3D
 
     // Sprites carry their own Modulate, which is the reliable way to fade them. Meshes have no
     // modulate, so those go through GeometryInstance3D.Transparency instead. Either way the
-    // material is left alone, so a shared material can't be fought over by two players' effects.
+    // material is left alone, so a shared material can't be fought over by two live effects.
     void SetAlpha(float alpha)
     {
         alpha = Mathf.Clamp(alpha, 0f, 1f);
-        foreach (GeometryInstance3D g in tinted)
+        foreach (GeometryInstance3D g in owned)
         {
             if (g is SpriteBase3D sprite)
             {
@@ -85,19 +129,31 @@ public partial class FrameVfx : Node3D
         }
     }
 
-    GeometryInstance3D[] CollectGeometry()
+    void EnsureCollected()
     {
-        var found = new Godot.Collections.Array<GeometryInstance3D>();
-        Walk(this, found);
-        var result = new GeometryInstance3D[found.Count];
-        for (int i = 0; i < found.Count; i++) result[i] = found[i];
-        return result;
+        if (owned != null) return;
+
+        var geometry = new List<GeometryInstance3D>();
+        var nested = new List<FrameVfx>();
+        foreach (Node child in GetChildren())
+            Walk(child, geometry, nested);
+
+        owned = geometry.ToArray();
+        parts = nested.ToArray();
     }
 
-    static void Walk(Node node, Godot.Collections.Array<GeometryInstance3D> into)
+    // Descends until it hits a nested FrameVfx, which claims everything below itself instead.
+    static void Walk(Node node, List<GeometryInstance3D> geometry, List<FrameVfx> nested)
     {
-        if (node is GeometryInstance3D g) into.Add(g);
+        if (node is FrameVfx part)
+        {
+            nested.Add(part);
+            return;
+        }
+
+        if (node is GeometryInstance3D g) geometry.Add(g);
+
         foreach (Node child in node.GetChildren())
-            Walk(child, into);
+            Walk(child, geometry, nested);
     }
 }
