@@ -21,7 +21,6 @@ public partial class FrameVfx : Node3D
     // Position through a sprite sheet. Needs Hframes/Vframes, or an AnimatedSprite3D.
     [Export] public Curve SpriteFrameCurve;
 
-    [Export] public float BaseScale = 1.0f;
     [Export] public float MaxRotationDegrees = 0f;
     [Export] public bool FlipWithFacing = false;
     // Set on an effect's root to track the player that requested it instead of staying put.
@@ -40,6 +39,9 @@ public partial class FrameVfx : Node3D
 
     Visual[] owned;
     FrameVfx[] parts;
+    // Scale as authored in the scene, read once before any curve overwrites it. ScaleCurve
+    // multiplies this, so a non-uniform authored scale keeps its proportions.
+    Vector3 baseScale = Vector3.One;
 
     // Ticks until the last part finishes, so a long trailing part isn't cut off by a short root.
     public int TotalDurationFrames
@@ -81,11 +83,12 @@ public partial class FrameVfx : Node3D
 
     void Apply(float progress, int facing)
     {
-        // Only written when this part animates them, so a container's authored transform survives.
-        if (ScaleCurve != null || BaseScale != 1f || FlipWithFacing)
+        // Only written when this part animates it, so an unanimated authored scale survives.
+        if (ScaleCurve != null || FlipWithFacing)
         {
-            float s = BaseScale * Sample(ScaleCurve, progress, 1f);
-            Scale = new Vector3(s * (FlipWithFacing && facing < 0 ? -1f : 1f), s, s);
+            Vector3 s = baseScale * Sample(ScaleCurve, progress, 1f);
+            if (FlipWithFacing && facing < 0) s.X = -s.X;
+            Scale = s;
         }
 
         if (MaxRotationDegrees != 0f)
@@ -132,6 +135,8 @@ public partial class FrameVfx : Node3D
     void EnsureCollected()
     {
         if (owned != null) return;
+
+        baseScale = Scale;
 
         var geometry = new List<Visual>();
         var nested = new List<FrameVfx>();

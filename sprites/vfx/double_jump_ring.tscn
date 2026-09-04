@@ -1,84 +1,88 @@
 [gd_scene format=3 uid="uid://du1hh3mpsudsq"]
 
 [ext_resource type="Script" uid="uid://dp2ymydadqtpj" path="res://scripts/FrameVfx.cs" id="1_framevfx"]
-[ext_resource type="Texture2D" uid="uid://db5v61rydab7x" path="res://sprites/vfx/ring.png" id="2_ring"]
-[ext_resource type="Material" uid="uid://cvfxsprmat01" path="res://sprites/vfx/vfx_sprite_material.tres" id="3_mat"]
+[ext_resource type="Shader" uid="uid://dty2gkm5ul8a8" path="res://shaders/vfx_sprite.gdshader" id="2_4pipp"]
+[ext_resource type="Texture2D" uid="uid://bctbgcm6xurkd" path="res://sprites/vfx/Jump Circle vfx.png" id="3_81ytx"]
+[ext_resource type="Texture2D" uid="uid://3ujf4cujbofp" path="res://sprites/vfx/fartcloud vfx.png" id="4_4pipp"]
 
 [sub_resource type="Curve" id="Curve_scale"]
 _limits = [0.1, 2.0, 0.0, 1.0]
-_data = [Vector2(0, 0.2), 0.0, 4.0, 0, 0, Vector2(1, 1.5), 0.0, 0.0, 0, 0]
+_data = [Vector2(0, 0.1), 0.0, 4.0, 0, 0, Vector2(1, 1.4234124), 0.0, 0.0, 0, 0]
 point_count = 2
 
 [sub_resource type="Curve" id="Curve_alpha"]
-_data = [Vector2(0, 1), 0.0, 0.0, 0, 0, Vector2(1, 0), 0.0, 0.0, 0, 0]
+_data = [Vector2(0, 0.5626502), 0.0, -0.07801546, 0, 0, Vector2(1, 0), -1.2341442, 0.0, 0, 0]
 point_count = 2
 
-[sub_resource type="Curve" id="Curve_scale2"]
-_limits = [0.0, 2.6, 0.0, 1.0]
-_data = [Vector2(0, 0.45), 0.0, 1.2, 0, 0, Vector2(0.55, 1.35), 0.6, 0.6, 0, 0, Vector2(1, 2.1), 0.0, 0.0, 0, 0]
-point_count = 3
+[sub_resource type="ShaderMaterial" id="ShaderMaterial_4pipp"]
+resource_name = "VFX Sprite (subtractive fade)"
+render_priority = 0
+shader = ExtResource("2_4pipp")
+shader_parameter/tex = ExtResource("3_81ytx")
+shader_parameter/fade = 1.0
+shader_parameter/tint = Color(1, 1, 1, 1)
 
-[sub_resource type="Curve" id="Curve_alpha2"]
-_data = [Vector2(0, 0.9), 0.0, 0.0, 0, 0, Vector2(0.45, 0.55), 0.0, 0.0, 0, 0, Vector2(1, 0), 0.0, 0.0, 0, 0]
-point_count = 3
+[sub_resource type="ShaderMaterial" id="ShaderMaterial_ieiuc"]
+resource_name = "VFX Sprite (subtractive fade)"
+render_priority = 0
+shader = ExtResource("2_4pipp")
+shader_parameter/tex = ExtResource("3_81ytx")
+shader_parameter/fade = 1.0
+shader_parameter/tint = Color(1, 1, 1, 1)
 
-[sub_resource type="Curve" id="Curve_scale3"]
-_limits = [0.0, 3.2, 0.0, 1.0]
-_data = [Vector2(0, 0.1), 0.0, 6.0, 0, 0, Vector2(0.3, 1.6), 0.9, 0.9, 0, 0, Vector2(1, 2.8), 0.0, 0.0, 0, 0]
-point_count = 3
-
-[sub_resource type="Curve" id="Curve_alpha3"]
-_data = [Vector2(0, 0.5), 0.0, 0.0, 0, 0, Vector2(0.2, 0.7), 0.0, 0.0, 0, 0, Vector2(0.75, 0.25), 0.0, 0.0, 0, 0, Vector2(1, 0), 0.0, 0.0, 0, 0]
-point_count = 4
-
-[sub_resource type="Curve" id="Curve_rot3"]
-_data = [Vector2(0, 0), 0.0, 1.0, 0, 0, Vector2(1, 1), 0.0, 0.0, 0, 0]
-point_count = 2
+[sub_resource type="ShaderMaterial" id="ShaderMaterial_yg77h"]
+resource_name = "VFX Sprite (subtractive fade)"
+render_priority = 0
+shader = ExtResource("2_4pipp")
+shader_parameter/tex = ExtResource("4_4pipp")
+shader_parameter/fade = 1.0
+shader_parameter/tint = Color(1, 1, 1, 1)
 
 [node name="DoubleJumpRing" type="Node3D" unique_id=1335122501]
 script = ExtResource("1_framevfx")
 DurationFrames = 1
 
-[node name="Ring1" type="Node3D" parent="." unique_id=1572409290]
+[node name="Ring2" type="Node3D" parent="." unique_id=183253544]
+transform = Transform3D(2, 0, 0, 0, 2, 0, 0, 0, 2, 0, 0.4911443, 0)
 script = ExtResource("1_framevfx")
-DurationFrames = 30
+DurationFrames = 13
 ScaleCurve = SubResource("Curve_scale")
 AlphaCurve = SubResource("Curve_alpha")
+BaseScale = 2.0
 
-[node name="Sprite" type="Sprite3D" parent="Ring1" unique_id=1572409285]
-visible = false
+[node name="Sprite" type="Sprite3D" parent="Ring2" unique_id=1233264216]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.021912754, 0)
+material_override = SubResource("ShaderMaterial_4pipp")
 pixel_size = 0.004
 texture_filter = 1
-texture = ExtResource("2_ring")
-material_override = ExtResource("3_mat")
+texture = ExtResource("3_81ytx")
 
-[node name="Ring2" type="Node3D" parent="." unique_id=1572409291]
+[node name="Ring1" type="Node3D" parent="." unique_id=1572409290]
+transform = Transform3D(1.5, 0, 0, 0, 1.5, 0, 0, 0, 1.5, 0, 0.65757126, 0)
 script = ExtResource("1_framevfx")
-StartOffsetFrames = 2
 DurationFrames = 13
-ScaleCurve = SubResource("Curve_scale2")
-AlphaCurve = SubResource("Curve_alpha2")
-FollowSpawner = true
+ScaleCurve = SubResource("Curve_scale")
+AlphaCurve = SubResource("Curve_alpha")
+BaseScale = 1.5
 
-[node name="Sprite" type="Sprite3D" parent="Ring2" unique_id=1572409286]
-visible = false
-pixel_size = 0.0032
+[node name="Sprite" type="Sprite3D" parent="Ring1" unique_id=1572409285]
+material_override = SubResource("ShaderMaterial_ieiuc")
+pixel_size = 0.004
 texture_filter = 1
-texture = ExtResource("2_ring")
-material_override = ExtResource("3_mat")
+texture = ExtResource("3_81ytx")
 
-[node name="Ring3" type="Node3D" parent="." unique_id=1572409292]
+[node name="Ring3" type="Node3D" parent="." unique_id=452263353]
+transform = Transform3D(0.8, 0, 0, 0, 0.8, 0, 0, 0, 0.8, 0, 0.04245776, 0)
 script = ExtResource("1_framevfx")
-StartOffsetFrames = 4
-DurationFrames = 18
-ScaleCurve = SubResource("Curve_scale3")
-AlphaCurve = SubResource("Curve_alpha3")
-RotationCurve = SubResource("Curve_rot3")
-MaxRotationDegrees = 35.0
+DurationFrames = 6
+ScaleCurve = SubResource("Curve_scale")
+AlphaCurve = SubResource("Curve_alpha")
+BaseScale = 0.8
 
-[node name="Sprite" type="Sprite3D" parent="Ring3" unique_id=1572409287]
+[node name="Sprite" type="Sprite3D" parent="Ring3" unique_id=1618568347]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, -0.65672255, 0)
 visible = false
-pixel_size = 0.0026
+material_override = SubResource("ShaderMaterial_yg77h")
+pixel_size = 0.004
 texture_filter = 1
-texture = ExtResource("2_ring")
-material_override = ExtResource("3_mat")
+texture = ExtResource("4_4pipp")

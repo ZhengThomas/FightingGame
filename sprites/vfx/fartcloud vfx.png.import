@@ -2,8 +2,8 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://db5v61rydab7x"
-path.s3tc="res://.godot/imported/ring.png-0fd3e83e5623f539bab9715a4d93eb55.s3tc.ctex"
+uid="uid://3ujf4cujbofp"
+path.s3tc="res://.godot/imported/fartcloud vfx.png-81415847177e37f41f60e19c58a5bd33.s3tc.ctex"
 metadata={
 "imported_formats": ["s3tc_bptc"],
 "vram_texture": true
@@ -11,8 +11,8 @@ metadata={
 
 [deps]
 
-source_file="res://sprites/vfx/ring.png"
-dest_files=["res://.godot/imported/ring.png-0fd3e83e5623f539bab9715a4d93eb55.s3tc.ctex"]
+source_file="res://sprites/vfx/fartcloud vfx.png"
+dest_files=["res://.godot/imported/fartcloud vfx.png-81415847177e37f41f60e19c58a5bd33.s3tc.ctex"]
 
 [params]
 

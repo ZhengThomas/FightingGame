@@ -1224,7 +1224,6 @@ public partial class Player : Node3D
             if (inAir)
             {
                 jump.HasDoubleJump = false;
-                RequestVfx(VfxKind.DoubleJumpRing);
                 updateFacing(true);
             }
             TransitionTo(PlayerState.Jumping);
@@ -1509,7 +1508,6 @@ public partial class Player : Node3D
 
             Jump(Stats.DoubleJumpForce, jumptype);
             jump.HasDoubleJump = false;
-            RequestVfx(VfxKind.DoubleJumpRing);
         }
         else if ((ForwardDashInputted() || BackDashInputted()) && jump.HasAirdash && jump.FramesSinceLastJump >= Stats.FramesUntilActionableAfterJump)
         {
@@ -1755,6 +1753,7 @@ public partial class Player : Node3D
                 break;
         }
         physics.VelocityX *= jump.jumpDirection;
+        RequestVfx(VfxKind.DoubleJumpRing);
 
         jump.FramesSinceLastJump = 0;
     }
