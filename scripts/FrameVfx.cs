@@ -1,62 +1,55 @@
 using Godot;
 using System.Collections.Generic;
 
-// How a one-shot visual looks at a given point in its life. Purely presentational: it holds no
-// timer, never advances itself, and knows nothing about when or why it was started.
+// How a one-shot visual looks at a given tick of its life. Holds no timer and never advances itself
+// — VfxManager hands it a tick count each frame. Nothing here is snapshotted, so a rollback has
+// nothing to rewind.
 //
-// VfxManager owns the "when" — it pools these and each frame hands every live one the number of
-// ticks since it started. Because that count comes from MatchManager.SimFrame, which stalls during
-// hit pause, effects freeze with the game for free; because none of it is in a snapshot, there is
-// nothing for a rollback to rewind.
-//
-// These nest. A FrameVfx with FrameVfx children is a compound effect: the raw tick count is passed
-// down unchanged, and every part works out its own progress from its own StartOffsetFrames and
-// DurationFrames. That's how three rings stagger two frames apart, or smoke outlasts the flash.
-// A part owns the geometry beneath it up to the next nested FrameVfx, so parts never fight over
-// each other's sprites.
-//
-// Shape a part by drawing its curves in the inspector. A new effect is a new scene — no code.
+// These nest: a FrameVfx with FrameVfx children passes the tick count down unchanged, and each part
+// applies its own StartOffsetFrames and DurationFrames. That staggers parts of one effect. A part
+// owns the geometry below it up to the next nested FrameVfx.
 [Tool]
 public partial class FrameVfx : Node3D
 {
-    // Ticks this part waits after the effect starts before it appears. 0 = starts immediately.
     [Export] public int StartOffsetFrames = 0;
-    // Ticks this part takes to run, once it has started.
     [Export] public int DurationFrames = 15;
 
-    // Progress (0..1) -> multiplier on BaseScale. Empty leaves the authored scale alone.
+    // All sampled with progress 0..1. Empty means "leave it alone".
     [Export] public Curve ScaleCurve;
-    // Progress (0..1) -> opacity (0..1). Empty means fully opaque the whole way.
     [Export] public Curve AlphaCurve;
-    // Progress (0..1) -> degrees of spin about Z, times MaxRotationDegrees.
     [Export] public Curve RotationCurve;
+    // Position through a sprite sheet. Needs Hframes/Vframes, or an AnimatedSprite3D.
+    [Export] public Curve SpriteFrameCurve;
 
     [Export] public float BaseScale = 1.0f;
     [Export] public float MaxRotationDegrees = 0f;
-    // Mirrors this part on X to face the way the character does. Leave off for symmetric art.
     [Export] public bool FlipWithFacing = false;
-
-    // Set on an effect's ROOT to make it track the player that requested it, instead of staying
-    // where it spawned. Reading the player's live position each frame means there is nothing to
-    // store and nothing for a rollback to rewind — a resim just corrects the player and the effect
-    // follows. Facing is still locked at spawn, so a directional effect can't flip mid-play.
+    // Set on an effect's root to track the player that requested it instead of staying put.
     [Export] public bool FollowSpawner = false;
 
-    // Geometry belonging to this part only — the walk stops at a nested FrameVfx.
-    GeometryInstance3D[] owned;
-    // Nested parts, handed the same raw tick count as this node.
+    // A drawable and how it looked before any curve touched it.
+    class Visual
+    {
+        public GeometryInstance3D Node;
+        public SpriteBase3D Sprite;   // null for meshes
+        public float BaseAlpha = 1f;
+        public int SheetFrames;
+        public bool Scissor;          // Alpha Cut = Discard: fade erodes pixels instead of dimming
+        public ShaderMaterial Fade;   // vfx_sprite.gdshader: fade subtracts per pixel, not scales
+    }
+
+    Visual[] owned;
     FrameVfx[] parts;
 
-    // Ticks from the effect starting to its last part finishing. VfxManager uses this to know when
-    // the whole thing is done, so a long trailing part can't be cut off by a short root.
+    // Ticks until the last part finishes, so a long trailing part isn't cut off by a short root.
     public int TotalDurationFrames
     {
         get
         {
             EnsureCollected();
             int total = StartOffsetFrames + DurationFrames;
-            foreach (FrameVfx part in parts)
-                total = Mathf.Max(total, StartOffsetFrames + part.TotalDurationFrames);
+            foreach (FrameVfx p in parts)
+                total = Mathf.Max(total, StartOffsetFrames + p.TotalDurationFrames);
             return total;
         }
     }
@@ -64,76 +57,83 @@ public partial class FrameVfx : Node3D
     public override void _Ready()
     {
         EnsureCollected();
-        SetFrame(-1);   // start hidden
+        SetFrame(-1);
     }
 
-    // frame = ticks since the whole effect started. Negative, or past this part's window, hides it.
-    // Pass the same number to every part; each shifts it by its own offset.
+    // frame = ticks since the whole effect started; parts shift it by their own offset.
     public void SetFrame(int frame, int facing = 1)
     {
         EnsureCollected();
 
         int local = frame - StartOffsetFrames;
-        bool showing = local >= 0 && local < DurationFrames && DurationFrames > 0;
+        bool showing = local >= 0 && local < DurationFrames;
+
+        foreach (Visual v in owned)
+            v.Node.Visible = showing;
 
         if (showing)
             Apply((float)local / DurationFrames, facing);
 
-        foreach (GeometryInstance3D g in owned)
-            g.Visible = showing;
-
-        // Parts run on the effect's clock, not this part's, so they get the raw count. A part can
-        // therefore still be playing after its parent's own window has closed.
-        foreach (FrameVfx part in parts)
-            part.SetFrame(frame, facing);
+        // Parts run on the effect's clock, so they can still be playing after this part's window.
+        foreach (FrameVfx p in parts)
+            p.SetFrame(frame, facing);
     }
 
     void Apply(float progress, int facing)
     {
-        // Only touch the transform when this part actually animates it, so a container's authored
-        // scale/rotation survives being handed a progress.
-        if (ScaleCurve != null || BaseScale != 1.0f || FlipWithFacing)
+        // Only written when this part animates them, so a container's authored transform survives.
+        if (ScaleCurve != null || BaseScale != 1f || FlipWithFacing)
         {
-            float scale = BaseScale * Sample(ScaleCurve, progress, 1f);
-            float flip = (FlipWithFacing && facing < 0) ? -1f : 1f;
-            Scale = new Vector3(scale * flip, scale, scale);
+            float s = BaseScale * Sample(ScaleCurve, progress, 1f);
+            Scale = new Vector3(s * (FlipWithFacing && facing < 0 ? -1f : 1f), s, s);
         }
 
         if (MaxRotationDegrees != 0f)
             Rotation = new Vector3(0f, 0f, Mathf.DegToRad(MaxRotationDegrees * Sample(RotationCurve, progress, 0f)));
 
-        SetAlpha(Sample(AlphaCurve, progress, 1f));
+        float alpha = Mathf.Clamp(Sample(AlphaCurve, progress, 1f), 0f, 1f);
+        float sheet = Sample(SpriteFrameCurve, progress, progress);
+
+        foreach (Visual v in owned)
+        {
+            // Curve subtracts from the authored opacity rather than scaling it, so dim parts drop
+            // out before opaque ones.
+            float a = Mathf.Clamp(v.BaseAlpha + alpha - 1f, 0f, 1f);
+
+            if (v.Fade != null)
+                v.Fade.SetShaderParameter("fade", a);
+            else if (v.Sprite == null)
+                v.Node.Transparency = 1f - a;
+            else if (v.Scissor)
+            {
+                // Threshold 1 still keeps fully-opaque pixels, so hide once nothing should remain.
+                v.Sprite.AlphaScissorThreshold = 1f - a;
+                v.Node.Visible = a > 0f;
+            }
+            else
+            {
+                Color c = v.Sprite.Modulate;
+                c.A = a;
+                v.Sprite.Modulate = c;
+            }
+
+            if (v.SheetFrames > 1)
+            {
+                int i = Mathf.Clamp((int)(sheet * v.SheetFrames), 0, v.SheetFrames - 1);
+                if (v.Sprite is AnimatedSprite3D anim) anim.Frame = i;
+                else if (v.Sprite is Sprite3D spr) spr.Frame = i;
+            }
+        }
     }
 
     static float Sample(Curve curve, float progress, float fallback)
         => curve != null ? curve.Sample(progress) : fallback;
 
-    // Sprites carry their own Modulate, which is the reliable way to fade them. Meshes have no
-    // modulate, so those go through GeometryInstance3D.Transparency instead. Either way the
-    // material is left alone, so a shared material can't be fought over by two live effects.
-    void SetAlpha(float alpha)
-    {
-        alpha = Mathf.Clamp(alpha, 0f, 1f);
-        foreach (GeometryInstance3D g in owned)
-        {
-            if (g is SpriteBase3D sprite)
-            {
-                Color c = sprite.Modulate;
-                c.A = alpha;
-                sprite.Modulate = c;
-            }
-            else
-            {
-                g.Transparency = 1f - alpha;
-            }
-        }
-    }
-
     void EnsureCollected()
     {
         if (owned != null) return;
 
-        var geometry = new List<GeometryInstance3D>();
+        var geometry = new List<Visual>();
         var nested = new List<FrameVfx>();
         foreach (Node child in GetChildren())
             Walk(child, geometry, nested);
@@ -142,18 +142,47 @@ public partial class FrameVfx : Node3D
         parts = nested.ToArray();
     }
 
-    // Descends until it hits a nested FrameVfx, which claims everything below itself instead.
-    static void Walk(Node node, List<GeometryInstance3D> geometry, List<FrameVfx> nested)
+    // Stops at a nested FrameVfx, which claims everything below itself instead.
+    static void Walk(Node node, List<Visual> geometry, List<FrameVfx> nested)
     {
-        if (node is FrameVfx part)
-        {
-            nested.Add(part);
-            return;
-        }
+        if (node is FrameVfx part) { nested.Add(part); return; }
 
-        if (node is GeometryInstance3D g) geometry.Add(g);
+        if (node is GeometryInstance3D g) geometry.Add(Describe(g));
 
         foreach (Node child in node.GetChildren())
             Walk(child, geometry, nested);
+    }
+
+    static Visual Describe(GeometryInstance3D g)
+    {
+        var v = new Visual { Node = g, Sprite = g as SpriteBase3D };
+
+        // Duplicated per sprite so two live copies of an effect don't share one fade value. The
+        // shader itself is still shared; only the parameters are per-instance.
+        if (g.MaterialOverride is ShaderMaterial shared)
+        {
+            v.Fade = (ShaderMaterial)shared.Duplicate();
+            g.MaterialOverride = v.Fade;
+
+            // Bind the sprite's own texture, so it's set in one place rather than twice.
+            if (v.Sprite is Sprite3D src && src.Texture != null)
+                v.Fade.SetShaderParameter("tex", src.Texture);
+        }
+
+        if (v.Sprite == null)
+        {
+            v.BaseAlpha = 1f - g.Transparency;
+            return v;
+        }
+
+        v.BaseAlpha = v.Sprite.Modulate.A;
+        v.Scissor = v.Sprite.AlphaCut == SpriteBase3D.AlphaCutMode.Discard;
+        v.SheetFrames = v.Sprite switch
+        {
+            AnimatedSprite3D a => a.SpriteFrames?.GetFrameCount(a.Animation) ?? 0,
+            Sprite3D s => s.Hframes * s.Vframes,
+            _ => 0,
+        };
+        return v;
     }
 }

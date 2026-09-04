@@ -1,0 +1,9 @@
+[gd_resource type="ShaderMaterial" format=3 uid="uid://cvfxsprmat01"]
+
+[ext_resource type="Shader" path="res://shaders/vfx_sprite.gdshader" id="1_shader"]
+
+[resource]
+resource_name = "VFX Sprite (subtractive fade)"
+shader = ExtResource("1_shader")
+shader_parameter/fade = 1.0
+shader_parameter/tint = Color(1, 1, 1, 1)

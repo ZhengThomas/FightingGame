@@ -1,7 +1,8 @@
-[gd_scene load_steps=9 format=3 uid="uid://du1hh3mpsudsq"]
+[gd_scene format=3 uid="uid://du1hh3mpsudsq"]
 
 [ext_resource type="Script" uid="uid://dp2ymydadqtpj" path="res://scripts/FrameVfx.cs" id="1_framevfx"]
 [ext_resource type="Texture2D" uid="uid://db5v61rydab7x" path="res://sprites/vfx/ring.png" id="2_ring"]
+[ext_resource type="Material" uid="uid://cvfxsprmat01" path="res://sprites/vfx/vfx_sprite_material.tres" id="3_mat"]
 
 [sub_resource type="Curve" id="Curve_scale"]
 _limits = [0.1, 2.0, 0.0, 1.0]
@@ -9,8 +10,8 @@ _data = [Vector2(0, 0.2), 0.0, 4.0, 0, 0, Vector2(1, 1.5), 0.0, 0.0, 0, 0]
 point_count = 2
 
 [sub_resource type="Curve" id="Curve_alpha"]
-_data = [Vector2(0, 0.65190524), 0.0, 0.0, 0, 0, Vector2(0.33474576, 0.75008583), 0.0, 0.0, 0, 0, Vector2(1, 0), 0.0, 0.0, 0, 0]
-point_count = 3
+_data = [Vector2(0, 1), 0.0, 0.0, 0, 0, Vector2(1, 0), 0.0, 0.0, 0, 0]
+point_count = 2
 
 [sub_resource type="Curve" id="Curve_scale2"]
 _limits = [0.0, 2.6, 0.0, 1.0]
@@ -36,23 +37,20 @@ point_count = 2
 
 [node name="DoubleJumpRing" type="Node3D" unique_id=1335122501]
 script = ExtResource("1_framevfx")
-StartOffsetFrames = 0
 DurationFrames = 1
-BaseScale = 1.0
 
 [node name="Ring1" type="Node3D" parent="." unique_id=1572409290]
 script = ExtResource("1_framevfx")
-StartOffsetFrames = 0
-DurationFrames = 8
+DurationFrames = 30
 ScaleCurve = SubResource("Curve_scale")
 AlphaCurve = SubResource("Curve_alpha")
 
 [node name="Sprite" type="Sprite3D" parent="Ring1" unique_id=1572409285]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.15, 0)
+visible = false
 pixel_size = 0.004
-billboard = 1
 texture_filter = 1
 texture = ExtResource("2_ring")
+material_override = ExtResource("3_mat")
 
 [node name="Ring2" type="Node3D" parent="." unique_id=1572409291]
 script = ExtResource("1_framevfx")
@@ -60,13 +58,14 @@ StartOffsetFrames = 2
 DurationFrames = 13
 ScaleCurve = SubResource("Curve_scale2")
 AlphaCurve = SubResource("Curve_alpha2")
+FollowSpawner = true
 
 [node name="Sprite" type="Sprite3D" parent="Ring2" unique_id=1572409286]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.18, 0)
+visible = false
 pixel_size = 0.0032
-billboard = 1
 texture_filter = 1
 texture = ExtResource("2_ring")
+material_override = ExtResource("3_mat")
 
 [node name="Ring3" type="Node3D" parent="." unique_id=1572409292]
 script = ExtResource("1_framevfx")
@@ -78,8 +77,8 @@ RotationCurve = SubResource("Curve_rot3")
 MaxRotationDegrees = 35.0
 
 [node name="Sprite" type="Sprite3D" parent="Ring3" unique_id=1572409287]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.12, 0)
+visible = false
 pixel_size = 0.0026
-billboard = 1
 texture_filter = 1
 texture = ExtResource("2_ring")
+material_override = ExtResource("3_mat")
