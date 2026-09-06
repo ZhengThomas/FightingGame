@@ -68,46 +68,47 @@ public partial class FrameVfx : Node3D
     }
 
     // frame = ticks since the whole effect started; parts shift it by their own offset.
-    public void SetFrame(int frame, int facing = 1)
+    // inheritFlip carries an ancestor's mirror down, so FlipWithFacing on a root mirrors the whole
+    // effect and a part can still opt in on its own.
+    public void SetFrame(int frame, int facing = 1, bool inheritFlip = false)
     {
         EnsureCollected();
 
         int local = frame - StartOffsetFrames;
         bool showing = local >= 0 && local < DurationFrames;
+        bool flip = inheritFlip || (FlipWithFacing && facing < 0);
 
         foreach (Visual v in owned)
             v.Node.Visible = showing;
 
         if (showing)
-            Apply((float)local / DurationFrames, facing);
+            Apply((float)local / DurationFrames, flip);
 
         // Parts run on the effect's clock, so they can still be playing after this part's window.
         foreach (FrameVfx p in parts)
-            p.SetFrame(frame, facing);
+            p.SetFrame(frame, facing, flip);
     }
 
-    void Apply(float progress, int facing)
+    void Apply(float progress, bool flip)
     {
-
-        bool flip = FlipWithFacing && facing < 0;
-
         // Only written when this part animates it, so an unanimated authored scale survives.
         if (ScaleCurve != null)
             Scale = baseScale * Sample(ScaleCurve, progress, 1f);
 
         // Mirrored about the effect's own origin, which VfxManager leaves unrotated on the player,
         // so a part offset to one side swings to the other however the part itself is turned.
-        if (isPart && FlipWithFacing)
-            Position = new Vector3(flip ? -basePosition.X : basePosition.X, basePosition.Y, basePosition.Z);
+        if (isPart)
+            Position = flip ? new Vector3(-basePosition.X, basePosition.Y, basePosition.Z) : basePosition;
 
         float spin = MaxRotationDegrees != 0f
             ? Mathf.DegToRad(MaxRotationDegrees * Sample(RotationCurve, progress, 0f))
             : 0f;
 
         // A mirrored shape spins the other way, so the whole Z angle is negated, authored included.
-        if (spin != 0f || flip)
-            Rotation = new Vector3(baseRotation.X, baseRotation.Y,
-                flip ? -(baseRotation.Z + spin) : baseRotation.Z + spin);
+        // Written every frame, not just while flipping: instances are pooled, so a copy left
+        // negated by an earlier flipped play would keep that rotation on its next unflipped one.
+        float z = baseRotation.Z + spin;
+        Rotation = new Vector3(baseRotation.X, baseRotation.Y, flip ? -z : z);
 
         float alpha = Mathf.Clamp(Sample(AlphaCurve, progress, 1f), 0f, 1f);
         float sheet = Sample(SpriteFrameCurve, progress, progress);

@@ -7,6 +7,8 @@ public enum VfxKind
     JumpRing = 1,
     DashCloud = 2,
     DashCloudBackwards = 3,
+    AirdashForward = 4,
+    AirdashBackward = 5,
 }
 
 // Owns every one-shot visual effect: when it starts, where it sits, and when it's done.
@@ -42,6 +44,8 @@ public partial class VfxManager : Node3D
         "res://sprites/vfx/double_jump_ring.tscn",
         "res://sprites/vfx/Dash Cloud.tscn",
         "res://sprites/vfx/Dash CloudBackwards.tscn",
+        "res://sprites/vfx/Airdash forwards.tscn",
+        "res://sprites/vfx/Airdash Backwards.tscn",
     };
 
     // Copies of each effect available to overlap at once. Requests past this recycle the oldest.

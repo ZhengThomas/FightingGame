@@ -7,12 +7,12 @@
 
 [sub_resource type="Curve" id="Curve_scale"]
 _limits = [0.1, 2.0, 0.0, 1.0]
-_data = [Vector2(0, 0.1), 0.0, 4.0, 0, 0, Vector2(1, 1.4234124), 0.0, 0.0, 0, 0]
+_data = [Vector2(0, 0.91465867), 0.0, 1.1434845, 0, 0, Vector2(1, 1.4234124), 0.0, 0.0, 0, 0]
 point_count = 2
 
 [sub_resource type="Curve" id="Curve_alpha"]
-_data = [Vector2(0, 0.5626502), 0.0, -0.07801546, 0, 0, Vector2(1, 0), -1.2341442, 0.0, 0, 0]
-point_count = 2
+_data = [Vector2(0, 1), 0.0, -0.07801546, 0, 0, Vector2(0.55508476, 0.8750429), -0.7307988, -0.7307988, 0, 0, Vector2(1, 0), -1.2341442, 0.0, 0, 0]
+point_count = 3
 
 [sub_resource type="ShaderMaterial" id="ShaderMaterial_bfh3m"]
 resource_name = "VFX Sprite (subtractive fade)"
@@ -41,43 +41,48 @@ shader_parameter/tint = Color(1, 1, 1, 1)
 [node name="Airdash" type="Node3D" unique_id=1335122501]
 script = ExtResource("1_bfh3m")
 DurationFrames = 1
+FlipWithFacing = true
 
 [node name="Ring2" type="Node3D" parent="." unique_id=183253544]
-transform = Transform3D(-8.742278e-08, -2, 0, 2, -8.742278e-08, 0, 0, 0, 2, -0.771, 1.75, 0)
+transform = Transform3D(-8.742278e-08, -2, 0, 2, -8.742278e-08, 0, 0, 0, 2, -0.771, 1.234683, 0)
 script = ExtResource("1_bfh3m")
+StartOffsetFrames = 6
 DurationFrames = 13
 ScaleCurve = SubResource("Curve_scale")
 AlphaCurve = SubResource("Curve_alpha")
 
 [node name="Sprite" type="Sprite3D" parent="Ring2" unique_id=1233264216]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.021912754, 0)
+transform = Transform3D(0.8, 0, 0, 0, 0.8, 0, 0, 0, 0.8, 0, 0.021912754, 0)
 material_override = SubResource("ShaderMaterial_bfh3m")
 pixel_size = 0.004
 texture_filter = 1
 texture = ExtResource("3_q6frt")
 
 [node name="Ring1" type="Node3D" parent="." unique_id=1572409290]
-transform = Transform3D(-6.556708e-08, -1.5, 0, 1.5, -6.556708e-08, 0, 0, 0, 1.5, -0.44180155, 1.757374, 0)
+transform = Transform3D(-6.556708e-08, -1.5, 0, 1.5, -6.556708e-08, 0, 0, 0, 1.5, -0.442, 1.23, 0)
 script = ExtResource("1_bfh3m")
+StartOffsetFrames = 6
 DurationFrames = 13
 ScaleCurve = SubResource("Curve_scale")
 AlphaCurve = SubResource("Curve_alpha")
 
 [node name="Sprite" type="Sprite3D" parent="Ring1" unique_id=1572409285]
+transform = Transform3D(0.8, 0, 0, 0, 0.8, 0, 0, 0, 0.8, 0, 0, 0)
 material_override = SubResource("ShaderMaterial_hupos")
 pixel_size = 0.004
 texture_filter = 1
 texture = ExtResource("3_q6frt")
 
-[node name="Ring3" type="Node3D" parent="." unique_id=452263353]
-transform = Transform3D(-3.4969112e-08, 0.8, 0, -0.8, -3.4969112e-08, 0, 0, 0, 0.8, -2.3511322, 0.8364783, 0)
+[node name="Ring3" type="Node3D" parent="." unique_id=621292063]
+transform = Transform3D(-4.371139e-08, 1, 0, -1, -4.371139e-08, 0, 0, 0, 1, -1.1876398, 1.234683, 0)
 script = ExtResource("1_bfh3m")
+StartOffsetFrames = 6
 DurationFrames = 6
 ScaleCurve = SubResource("Curve_scale")
 AlphaCurve = SubResource("Curve_alpha")
 
-[node name="Sprite" type="Sprite3D" parent="Ring3" unique_id=1618568347]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -1.2337542, 2.022285, 0)
+[node name="Sprite" type="Sprite3D" parent="Ring3" unique_id=1221075723]
+transform = Transform3D(0.8, 0, 0, 0, 0.8, 0, 0, 0, 0.8, 0, 0.021912754, 0)
 material_override = SubResource("ShaderMaterial_q6frt")
 pixel_size = 0.004
 texture_filter = 1

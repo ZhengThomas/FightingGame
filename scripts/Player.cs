@@ -1577,6 +1577,9 @@ public partial class Player : Node3D
         {
             ClearPushbackVelocity();
             jump.AirdashFrame = 0;
+            // Both entry paths lock AirDashDirection in before transitioning, so it's set by now.
+            bool forward = jump.AirDashDirection == (GetFacing() == FacingDirection.Right ? 1 : -1);
+            RequestVfx(forward ? VfxKind.AirdashForward : VfxKind.AirdashBackward);
         }
         if (newState == PlayerState.AirAttacking || newState == PlayerState.StandAttacking || newState == PlayerState.CrouchAttacking){
             currentBufferWindow = PlayerConstants.CancelBufferWindow;
