@@ -1,4 +1,5 @@
 using Godot;
+using System.Collections.Generic;
 
 // Which effect to show. Order must match VfxManager.EffectScenes.
 public enum VfxKind
@@ -48,10 +49,10 @@ public partial class VfxManager : Node3D
         "res://sprites/vfx/Airdash Backwards.tscn",
     };
 
-    // Copies of each effect available to overlap at once. Requests past this recycle the oldest.
-    // Needs to cover (effect length + IdKeepFrames) / spawn interval for effects that repeat, or a
-    // sustained one starts reclaiming slots that are still holding an id.
-    [Export] public int PoolPerEffect = 10;
+    // Ceiling on how many copies of one effect can exist. Pools start empty and grow only when a
+    // request finds nothing free, so each effect settles at its own peak and allocates no further.
+    // Only a runaway request rate should ever reach this.
+    [Export] public int MaxPerEffect = 12;
     // Ticks a finished effect holds its slot so its id can still reject a resim replay.
     // Must exceed the longest possible rollback.
     [Export] public int IdKeepFrames = 64;
@@ -65,7 +66,8 @@ public partial class VfxManager : Node3D
         public int OwnerNumber; // player that requested it, for FollowSpawner effects
     }
 
-    Slot[][] pools;
+    List<Slot>[] pools;
+    PackedScene[] loaded;
 
     public override void _Ready()
     {
@@ -78,38 +80,44 @@ public partial class VfxManager : Node3D
         if (Current == this) Current = null;
     }
 
+    // Loads the scenes but instances nothing. Effects are created on first use by Grow().
     void BuildPools()
     {
-        pools = new Slot[EffectScenes.Length][];
+        pools = new List<Slot>[EffectScenes.Length];
+        loaded = new PackedScene[EffectScenes.Length];
 
         for (int kind = 0; kind < EffectScenes.Length; kind++)
         {
+            pools[kind] = new List<Slot>();
+
             string path = EffectScenes[kind];
-            pools[kind] = new Slot[0];
             if (string.IsNullOrEmpty(path)) continue;
 
-            PackedScene packed = GD.Load<PackedScene>(path);
-            if (packed == null)
-            {
+            loaded[kind] = GD.Load<PackedScene>(path);
+            if (loaded[kind] == null)
                 GD.PushWarning($"VfxManager: could not load '{path}'.");
-                continue;
-            }
-
-            var slots = new Slot[PoolPerEffect];
-            for (int i = 0; i < PoolPerEffect; i++)
-            {
-                FrameVfx node = packed.Instantiate() as FrameVfx;
-                if (node == null)
-                {
-                    GD.PushWarning($"VfxManager: root of '{path}' is not a FrameVfx.");
-                    break;
-                }
-                AddChild(node);
-                node.SetFrame(-1);
-                slots[i] = new Slot { Node = node };
-            }
-            pools[kind] = slots;
         }
+    }
+
+    // Adds one more copy of an effect, or returns null at the ceiling.
+    Slot Grow(int kind)
+    {
+        if (pools[kind].Count >= MaxPerEffect || loaded[kind] == null) return null;
+
+        FrameVfx node = loaded[kind].Instantiate() as FrameVfx;
+        if (node == null)
+        {
+            GD.PushWarning($"VfxManager: root of '{EffectScenes[kind]}' is not a FrameVfx.");
+            loaded[kind] = null;   // don't retry a scene that can't work
+            return null;
+        }
+
+        AddChild(node);
+        node.SetFrame(-1);
+
+        var slot = new Slot { Node = node };
+        pools[kind].Add(slot);
+        return slot;
     }
 
     // Called from the sim the tick an effect should start. Idempotent: the same id twice is ignored,
@@ -123,35 +131,38 @@ public partial class VfxManager : Node3D
         int k = (int)kind;
         if (k <= 0 || k >= pools.Length) return;
 
-        Slot[] slots = pools[k];
-        if (slots == null || slots.Length == 0) return;
+        List<Slot> slots = pools[k];
 
         // Already showing (or still holding its id) — a replayed tick lands here and does nothing.
         foreach (Slot s in slots)
-            if (s != null && s.Id == id) return;
+            if (s.Id == id) return;
 
         int now = MatchManager.Current?.SimFrame ?? 0;
 
-        // Claim in order of least damage: a free slot, then one that has finished playing and is
-        // only holding its id, and only then one that's still visible. Taking a slot discards the
-        // id it held, so preferring finished ones keeps live effects' dedup protection intact.
+        // A free slot costs nothing, so take one if there is one.
         Slot target = null;
-        int targetRank = int.MaxValue;
         foreach (Slot s in slots)
+            if (s.Id == 0) { target = s; break; }
+
+        // Otherwise make a new copy rather than evict: every occupied slot is still holding an id a
+        // resim might replay, and taking one throws that id away.
+        target ??= Grow(k);
+
+        // At the ceiling. Evict the longest-finished slot, or failing that the longest-running one.
+        if (target == null)
         {
-            if (s?.Node == null) continue;
-
-            int rank = s.Id == 0 ? 0
-                     : (now - s.SpawnFrame >= s.Node.TotalDurationFrames ? 1 : 2);
-
-            if (rank < targetRank || (rank == targetRank && target != null && s.SpawnFrame < target.SpawnFrame))
+            int targetRank = int.MaxValue;
+            foreach (Slot s in slots)
             {
-                target = s;
-                targetRank = rank;
+                int rank = now - s.SpawnFrame >= s.Node.TotalDurationFrames ? 0 : 1;
+                if (rank < targetRank || (rank == targetRank && target != null && s.SpawnFrame < target.SpawnFrame))
+                {
+                    target = s;
+                    targetRank = rank;
+                }
             }
-            if (targetRank == 0) break;
         }
-        if (target == null) return;
+        if (target?.Node == null) return;
 
         target.Id = id;
         target.SpawnFrame = now;
@@ -173,10 +184,9 @@ public partial class VfxManager : Node3D
     {
         if (pools == null) return;
 
-        foreach (Slot[] slots in pools)
-            foreach (Slot s in slots ?? System.Array.Empty<Slot>())
+        foreach (List<Slot> slots in pools)
+            foreach (Slot s in slots)
             {
-                if (s?.Node == null) continue;
                 s.Id = 0;
                 s.Node.SetFrame(-1);
             }
@@ -188,10 +198,10 @@ public partial class VfxManager : Node3D
 
         int sim = MatchManager.Current?.SimFrame ?? 0;
 
-        foreach (Slot[] slots in pools)
-            foreach (Slot s in slots ?? System.Array.Empty<Slot>())
+        foreach (List<Slot> slots in pools)
+            foreach (Slot s in slots)
             {
-                if (s?.Node == null || s.Id == 0) continue;
+                if (s.Id == 0) continue;
 
                 int frame = sim - s.SpawnFrame;
                 int duration = s.Node.TotalDurationFrames;
