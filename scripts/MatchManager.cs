@@ -407,6 +407,8 @@ public partial class MatchManager : Node
 			// hit-pause gate, so a frozen tick doesn't advance the animation either.
 			Player1?.StepAnimator();
 			Player2?.StepAnimator();
+			Player1?.StepVfxCues();
+			Player2?.StepVfxCues();
 			// Only advance the presentation clock on frames the sim body ran — during hit pause
 			// this counter freezes and any polling observer (animator, VFX) sees ticksElapsed 0.
 			SimFrame++;

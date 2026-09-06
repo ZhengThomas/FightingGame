@@ -327,12 +327,10 @@ public partial class Player : Node3D
         };
     }
 
-    // Ask the presentation layer to show a one-shot effect at this player's current position.
-    //
-    // Safe to call from sim code even though it reaches outside the sim: the id is derived from
-    // frame + player, so a rollback resim re-requesting the same event is deduped into a no-op
-    // rather than spawning a second copy. Nothing about the effect is stored here or snapshotted.
-    void RequestVfx(VfxKind kind)
+    // Show a one-shot effect at this player's current position. PlayerVfxCues owns the rules for
+    // when. The id is derived from frame + player, so a rollback resim re-requesting the same event
+    // is deduped into a no-op rather than spawning a second copy.
+    public void RequestVfx(VfxKind kind)
     {
         int id = PlayerNumber * 1000000 + (Match?.FrameCount ?? 0);
         int facing = GetFacing() == FacingDirection.Right ? 1 : -1;
@@ -948,6 +946,9 @@ public partial class Player : Node3D
     // so a hit landing this tick shows on the same frame rather than the next one.
     public void StepAnimator() => anim = PlayerAnimFsm.Step(anim, this);
 
+    // After StepAnimator, so cues can key off the clip that's actually playing this tick.
+    public void StepVfxCues() => PlayerVfxCues.Step(this);
+
     public void Tick()
     {
         AdvanceHitboxes();
@@ -1401,6 +1402,7 @@ public partial class Player : Node3D
     {
         if (!BackDashInputted()) return false;
         TransitionTo(PlayerState.Backdashing);
+        RequestVfx(VfxKind.DashCloudBackwards);
         return true;
     }
 
@@ -1753,7 +1755,7 @@ public partial class Player : Node3D
                 break;
         }
         physics.VelocityX *= jump.jumpDirection;
-        RequestVfx(VfxKind.DoubleJumpRing);
+        RequestVfx(VfxKind.JumpRing);   // every jump: ground, double, dash, combo
 
         jump.FramesSinceLastJump = 0;
     }

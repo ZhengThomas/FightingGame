@@ -14,12 +14,21 @@ uniform float fade : hint_range(0.0, 1.0) = 1.0;
 uniform vec4 tint : source_color = vec4(1.0);
 
 void vertex() {
-    // Face the camera, keeping the node's scale (FrameVfx animates it).
-    mat4 mv = VIEW_MATRIX * mat4(INV_VIEW_MATRIX[0], INV_VIEW_MATRIX[1], INV_VIEW_MATRIX[2], MODEL_MATRIX[3]);
-    mv[0] *= length(MODEL_MATRIX[0].xyz);
-    mv[1] *= length(MODEL_MATRIX[1].xyz);
-    mv[2] *= length(MODEL_MATRIX[2].xyz);
-    MODELVIEW_MATRIX = mv;
+    // Face the camera, keeping the node's scale and its spin about Z. Plain billboarding builds the
+    // orientation purely from the camera and so discards all node rotation; recovering the roll and
+    // reapplying it in the camera's plane is what lets the sprite still be turned.
+    float roll = atan(MODEL_MATRIX[0].y, MODEL_MATRIX[0].x);
+    float cr = cos(roll);
+    float sr = sin(roll);
+
+    vec3 right = INV_VIEW_MATRIX[0].xyz;
+    vec3 up = INV_VIEW_MATRIX[1].xyz;
+
+    MODELVIEW_MATRIX = VIEW_MATRIX * mat4(
+        vec4((right * cr + up * sr) * length(MODEL_MATRIX[0].xyz), 0.0),
+        vec4((up * cr - right * sr) * length(MODEL_MATRIX[1].xyz), 0.0),
+        vec4(INV_VIEW_MATRIX[2].xyz * length(MODEL_MATRIX[2].xyz), 0.0),
+        MODEL_MATRIX[3]);
 }
 
 void fragment() {

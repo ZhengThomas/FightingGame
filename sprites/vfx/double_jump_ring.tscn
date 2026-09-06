@@ -48,7 +48,6 @@ script = ExtResource("1_framevfx")
 DurationFrames = 13
 ScaleCurve = SubResource("Curve_scale")
 AlphaCurve = SubResource("Curve_alpha")
-BaseScale = 2.0
 
 [node name="Sprite" type="Sprite3D" parent="Ring2" unique_id=1233264216]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.021912754, 0)
@@ -63,7 +62,6 @@ script = ExtResource("1_framevfx")
 DurationFrames = 13
 ScaleCurve = SubResource("Curve_scale")
 AlphaCurve = SubResource("Curve_alpha")
-BaseScale = 1.5
 
 [node name="Sprite" type="Sprite3D" parent="Ring1" unique_id=1572409285]
 material_override = SubResource("ShaderMaterial_ieiuc")
@@ -77,11 +75,9 @@ script = ExtResource("1_framevfx")
 DurationFrames = 6
 ScaleCurve = SubResource("Curve_scale")
 AlphaCurve = SubResource("Curve_alpha")
-BaseScale = 0.8
 
 [node name="Sprite" type="Sprite3D" parent="Ring3" unique_id=1618568347]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, -0.65672255, 0)
-visible = false
 material_override = SubResource("ShaderMaterial_yg77h")
 pixel_size = 0.004
 texture_filter = 1

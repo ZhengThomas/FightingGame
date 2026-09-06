@@ -1,10 +1,7 @@
 [gd_resource type="StandardMaterial3D" format=3 uid="uid://c5fe81pyb7445"]
 
-[ext_resource type="Texture2D" uid="uid://b54ahvfhk17e0" path="res://models/groundTileset.png" id="1_vmxhb"]
-
 [resource]
 resource_name = "Material.001"
 cull_mode = 2
 shading_mode = 0
 vertex_color_use_as_albedo = true
-albedo_texture = ExtResource("1_vmxhb")

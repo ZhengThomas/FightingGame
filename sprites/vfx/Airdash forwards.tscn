@@ -1,0 +1,84 @@
+[gd_scene format=3 uid="uid://d37o6071tmbkp"]
+
+[ext_resource type="Script" uid="uid://dp2ymydadqtpj" path="res://scripts/FrameVfx.cs" id="1_bfh3m"]
+[ext_resource type="Shader" uid="uid://dty2gkm5ul8a8" path="res://shaders/vfx_sprite.gdshader" id="2_hupos"]
+[ext_resource type="Texture2D" uid="uid://bctbgcm6xurkd" path="res://sprites/vfx/Jump Circle vfx.png" id="3_q6frt"]
+[ext_resource type="Texture2D" uid="uid://3ujf4cujbofp" path="res://sprites/vfx/fartcloud vfx.png" id="4_gg8qa"]
+
+[sub_resource type="Curve" id="Curve_scale"]
+_limits = [0.1, 2.0, 0.0, 1.0]
+_data = [Vector2(0, 0.1), 0.0, 4.0, 0, 0, Vector2(1, 1.4234124), 0.0, 0.0, 0, 0]
+point_count = 2
+
+[sub_resource type="Curve" id="Curve_alpha"]
+_data = [Vector2(0, 0.5626502), 0.0, -0.07801546, 0, 0, Vector2(1, 0), -1.2341442, 0.0, 0, 0]
+point_count = 2
+
+[sub_resource type="ShaderMaterial" id="ShaderMaterial_bfh3m"]
+resource_name = "VFX Sprite (subtractive fade)"
+render_priority = 0
+shader = ExtResource("2_hupos")
+shader_parameter/tex = ExtResource("3_q6frt")
+shader_parameter/fade = 1.0
+shader_parameter/tint = Color(1, 1, 1, 1)
+
+[sub_resource type="ShaderMaterial" id="ShaderMaterial_hupos"]
+resource_name = "VFX Sprite (subtractive fade)"
+render_priority = 0
+shader = ExtResource("2_hupos")
+shader_parameter/tex = ExtResource("3_q6frt")
+shader_parameter/fade = 1.0
+shader_parameter/tint = Color(1, 1, 1, 1)
+
+[sub_resource type="ShaderMaterial" id="ShaderMaterial_q6frt"]
+resource_name = "VFX Sprite (subtractive fade)"
+render_priority = 0
+shader = ExtResource("2_hupos")
+shader_parameter/tex = ExtResource("4_gg8qa")
+shader_parameter/fade = 1.0
+shader_parameter/tint = Color(1, 1, 1, 1)
+
+[node name="Airdash" type="Node3D" unique_id=1335122501]
+script = ExtResource("1_bfh3m")
+DurationFrames = 1
+
+[node name="Ring2" type="Node3D" parent="." unique_id=183253544]
+transform = Transform3D(-8.742278e-08, -2, 0, 2, -8.742278e-08, 0, 0, 0, 2, -0.771, 1.75, 0)
+script = ExtResource("1_bfh3m")
+DurationFrames = 13
+ScaleCurve = SubResource("Curve_scale")
+AlphaCurve = SubResource("Curve_alpha")
+
+[node name="Sprite" type="Sprite3D" parent="Ring2" unique_id=1233264216]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.021912754, 0)
+material_override = SubResource("ShaderMaterial_bfh3m")
+pixel_size = 0.004
+texture_filter = 1
+texture = ExtResource("3_q6frt")
+
+[node name="Ring1" type="Node3D" parent="." unique_id=1572409290]
+transform = Transform3D(-6.556708e-08, -1.5, 0, 1.5, -6.556708e-08, 0, 0, 0, 1.5, -0.44180155, 1.757374, 0)
+script = ExtResource("1_bfh3m")
+DurationFrames = 13
+ScaleCurve = SubResource("Curve_scale")
+AlphaCurve = SubResource("Curve_alpha")
+
+[node name="Sprite" type="Sprite3D" parent="Ring1" unique_id=1572409285]
+material_override = SubResource("ShaderMaterial_hupos")
+pixel_size = 0.004
+texture_filter = 1
+texture = ExtResource("3_q6frt")
+
+[node name="Ring3" type="Node3D" parent="." unique_id=452263353]
+transform = Transform3D(-3.4969112e-08, 0.8, 0, -0.8, -3.4969112e-08, 0, 0, 0, 0.8, -2.3511322, 0.8364783, 0)
+script = ExtResource("1_bfh3m")
+DurationFrames = 6
+ScaleCurve = SubResource("Curve_scale")
+AlphaCurve = SubResource("Curve_alpha")
+
+[node name="Sprite" type="Sprite3D" parent="Ring3" unique_id=1618568347]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -1.2337542, 2.022285, 0)
+material_override = SubResource("ShaderMaterial_q6frt")
+pixel_size = 0.004
+texture_filter = 1
+texture = ExtResource("4_gg8qa")

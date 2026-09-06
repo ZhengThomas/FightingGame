@@ -4,7 +4,9 @@ using Godot;
 public enum VfxKind
 {
     None = 0,
-    DoubleJumpRing = 1,
+    JumpRing = 1,
+    DashCloud = 2,
+    DashCloudBackwards = 3,
 }
 
 // Owns every one-shot visual effect: when it starts, where it sits, and when it's done.
@@ -38,10 +40,14 @@ public partial class VfxManager : Node3D
     {
         "",
         "res://sprites/vfx/double_jump_ring.tscn",
+        "res://sprites/vfx/Dash Cloud.tscn",
+        "res://sprites/vfx/Dash CloudBackwards.tscn",
     };
 
     // Copies of each effect available to overlap at once. Requests past this recycle the oldest.
-    [Export] public int PoolPerEffect = 6;
+    // Needs to cover (effect length + IdKeepFrames) / spawn interval for effects that repeat, or a
+    // sustained one starts reclaiming slots that are still holding an id.
+    [Export] public int PoolPerEffect = 10;
     // Ticks a finished effect holds its slot so its id can still reject a resim replay.
     // Must exceed the longest possible rollback.
     [Export] public int IdKeepFrames = 64;

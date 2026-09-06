@@ -12,7 +12,8 @@
 script = ExtResource("3_pose")
 Animation = "StandMedium"
 Frame = 19
-VfxFrame = 3
+PreviewVfxScene = "uid://4doa5u87aive"
+VfxFrame = 12
 
 [node name="HitboxGizmo" type="Node3D" parent="Player" unique_id=2120891098]
 script = ExtResource("2_gizmo")

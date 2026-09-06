@@ -33,15 +33,20 @@ public partial class FrameVfx : Node3D
         public SpriteBase3D Sprite;   // null for meshes
         public float BaseAlpha = 1f;
         public int SheetFrames;
+        public bool BaseFlipH;
         public bool Scissor;          // Alpha Cut = Discard: fade erodes pixels instead of dimming
         public ShaderMaterial Fade;   // vfx_sprite.gdshader: fade subtracts per pixel, not scales
     }
 
     Visual[] owned;
     FrameVfx[] parts;
-    // Scale as authored in the scene, read once before any curve overwrites it. ScaleCurve
-    // multiplies this, so a non-uniform authored scale keeps its proportions.
+    // Transform as authored in the scene, read once before any curve overwrites it. The curves
+    // compose with these rather than replacing them.
     Vector3 baseScale = Vector3.One;
+    Vector3 baseRotation = Vector3.Zero;
+    Vector3 basePosition = Vector3.Zero;
+    // False on an effect's root, whose position VfxManager owns — writing it here would fight that.
+    bool isPart;
 
     // Ticks until the last part finishes, so a long trailing part isn't cut off by a short root.
     public int TotalDurationFrames
@@ -83,16 +88,26 @@ public partial class FrameVfx : Node3D
 
     void Apply(float progress, int facing)
     {
-        // Only written when this part animates it, so an unanimated authored scale survives.
-        if (ScaleCurve != null || FlipWithFacing)
-        {
-            Vector3 s = baseScale * Sample(ScaleCurve, progress, 1f);
-            if (FlipWithFacing && facing < 0) s.X = -s.X;
-            Scale = s;
-        }
 
-        if (MaxRotationDegrees != 0f)
-            Rotation = new Vector3(0f, 0f, Mathf.DegToRad(MaxRotationDegrees * Sample(RotationCurve, progress, 0f)));
+        bool flip = FlipWithFacing && facing < 0;
+
+        // Only written when this part animates it, so an unanimated authored scale survives.
+        if (ScaleCurve != null)
+            Scale = baseScale * Sample(ScaleCurve, progress, 1f);
+
+        // Mirrored about the effect's own origin, which VfxManager leaves unrotated on the player,
+        // so a part offset to one side swings to the other however the part itself is turned.
+        if (isPart && FlipWithFacing)
+            Position = new Vector3(flip ? -basePosition.X : basePosition.X, basePosition.Y, basePosition.Z);
+
+        float spin = MaxRotationDegrees != 0f
+            ? Mathf.DegToRad(MaxRotationDegrees * Sample(RotationCurve, progress, 0f))
+            : 0f;
+
+        // A mirrored shape spins the other way, so the whole Z angle is negated, authored included.
+        if (spin != 0f || flip)
+            Rotation = new Vector3(baseRotation.X, baseRotation.Y,
+                flip ? -(baseRotation.Z + spin) : baseRotation.Z + spin);
 
         float alpha = Mathf.Clamp(Sample(AlphaCurve, progress, 1f), 0f, 1f);
         float sheet = Sample(SpriteFrameCurve, progress, progress);
@@ -120,6 +135,9 @@ public partial class FrameVfx : Node3D
                 v.Sprite.Modulate = c;
             }
 
+            if (v.Sprite != null)
+                v.Sprite.FlipH = v.BaseFlipH ^ flip;
+
             if (v.SheetFrames > 1)
             {
                 int i = Mathf.Clamp((int)(sheet * v.SheetFrames), 0, v.SheetFrames - 1);
@@ -137,6 +155,9 @@ public partial class FrameVfx : Node3D
         if (owned != null) return;
 
         baseScale = Scale;
+        baseRotation = Rotation;
+        basePosition = Position;
+        isPart = GetParent() is FrameVfx;
 
         var geometry = new List<Visual>();
         var nested = new List<FrameVfx>();
@@ -181,6 +202,7 @@ public partial class FrameVfx : Node3D
         }
 
         v.BaseAlpha = v.Sprite.Modulate.A;
+        v.BaseFlipH = v.Sprite.FlipH;
         v.Scissor = v.Sprite.AlphaCut == SpriteBase3D.AlphaCutMode.Discard;
         v.SheetFrames = v.Sprite switch
         {
