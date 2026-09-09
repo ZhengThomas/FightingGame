@@ -11,7 +11,7 @@ _data = [Vector2(0, 0.91465867), 0.0, 1.1434845, 0, 0, Vector2(1, 1.4234124), 0.
 point_count = 2
 
 [sub_resource type="Curve" id="Curve_alpha"]
-_data = [Vector2(0, 1), 0.0, -0.07801546, 0, 0, Vector2(0.55508476, 0.8750429), -0.7307988, -0.7307988, 0, 0, Vector2(1, 0), -1.2341442, 0.0, 0, 0]
+_data = [Vector2(0, 0.5805012), 0.0, -0.07801546, 0, 0, Vector2(0.5466102, 0.5894267), -0.7307988, -0.7307988, 0, 0, Vector2(1, 0), -1.2341442, 0.0, 0, 0]
 point_count = 3
 
 [sub_resource type="ShaderMaterial" id="ShaderMaterial_bfh3m"]
@@ -44,9 +44,9 @@ DurationFrames = 1
 FlipWithFacing = true
 
 [node name="Ring2" type="Node3D" parent="." unique_id=183253544]
-transform = Transform3D(-8.742278e-08, -2, 0, 2, -8.742278e-08, 0, 0, 0, 2, -0.771, 1.234683, 0)
+transform = Transform3D(-8.742278e-08, -2, 0, 2, -8.742278e-08, 0, 0, 0, 2, -1.2972814, 1.234683, 0)
 script = ExtResource("1_bfh3m")
-StartOffsetFrames = 6
+StartOffsetFrames = 4
 DurationFrames = 13
 ScaleCurve = SubResource("Curve_scale")
 AlphaCurve = SubResource("Curve_alpha")
@@ -59,9 +59,9 @@ texture_filter = 1
 texture = ExtResource("3_q6frt")
 
 [node name="Ring1" type="Node3D" parent="." unique_id=1572409290]
-transform = Transform3D(-6.556708e-08, -1.5, 0, 1.5, -6.556708e-08, 0, 0, 0, 1.5, -0.442, 1.23, 0)
+transform = Transform3D(-6.556708e-08, -1.5, 0, 1.5, -6.556708e-08, 0, 0, 0, 1.5, -1.0231022, 1.23, 0)
 script = ExtResource("1_bfh3m")
-StartOffsetFrames = 6
+StartOffsetFrames = 4
 DurationFrames = 13
 ScaleCurve = SubResource("Curve_scale")
 AlphaCurve = SubResource("Curve_alpha")
@@ -74,9 +74,9 @@ texture_filter = 1
 texture = ExtResource("3_q6frt")
 
 [node name="Ring3" type="Node3D" parent="." unique_id=621292063]
-transform = Transform3D(-4.371139e-08, 1, 0, -1, -4.371139e-08, 0, 0, 0, 1, -1.1876398, 1.234683, 0)
+transform = Transform3D(-4.371139e-08, 1, 0, -1, -4.371139e-08, 0, 0, 0, 1, -1.6042792, 1.234683, 0)
 script = ExtResource("1_bfh3m")
-StartOffsetFrames = 6
+StartOffsetFrames = 4
 DurationFrames = 6
 ScaleCurve = SubResource("Curve_scale")
 AlphaCurve = SubResource("Curve_alpha")

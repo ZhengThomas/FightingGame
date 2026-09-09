@@ -20,11 +20,22 @@ public partial class FrameVfx : Node3D
     [Export] public Curve RotationCurve;
     // Position through a sprite sheet. Needs Hframes/Vframes, or an AnimatedSprite3D.
     [Export] public Curve SpriteFrameCurve;
+    // Drawings actually used in the sheet, when the grid has spare cells at the end. 0 = the whole
+    // grid. A 4x3 sheet holding 10 frames wants 10, or it ends on two blank cells.
+    [Export] public int SheetFrameCount = 0;
 
     [Export] public float MaxRotationDegrees = 0f;
+    // Per-spawn spin picked from this range, so repeated hits don't look stamped. Applied to this
+    // node's transform, so setting it on a root turns the whole effect. 0/0 = no variation.
+    [Export] public float RandRotMin = 0f;
+    [Export] public float RandRotMax = 0f;
     [Export] public bool FlipWithFacing = false;
     // Set on an effect's root to track the player that requested it instead of staying put.
     [Export] public bool FollowSpawner = false;
+    // Set on an effect's root to keep playing through hit pause. Effects run off SimFrame, which
+    // stalls while the fighters are frozen — right for dust and trails, wrong for an impact, whose
+    // whole job is to animate during the freeze. Read from the root only.
+    [Export] public bool IgnoreHitPause = false;
 
     // A drawable and how it looked before any curve touched it.
     class Visual
@@ -47,6 +58,8 @@ public partial class FrameVfx : Node3D
     Vector3 basePosition = Vector3.Zero;
     // False on an effect's root, whose position VfxManager owns — writing it here would fight that.
     bool isPart;
+    // This spawn's pick from the random range, in radians.
+    float spawnSpin;
 
     // Ticks until the last part finishes, so a long trailing part isn't cut off by a short root.
     public int TotalDurationFrames
@@ -65,6 +78,32 @@ public partial class FrameVfx : Node3D
     {
         EnsureCollected();
         SetFrame(-1);
+    }
+
+    // Called once per spawn with the effect's dedup id. Deriving the spin from that id instead of a
+    // random number keeps it identical on both machines and unchanged when a rollback replays the
+    // same event, with no state to store.
+    public void SetSpawnSeed(int seed)
+    {
+        EnsureCollected();
+
+        spawnSpin = RandRotMax != RandRotMin
+            ? Mathf.DegToRad(Mathf.Lerp(RandRotMin, RandRotMax, Hash01(seed)))
+            : Mathf.DegToRad(RandRotMin);
+
+        // Decorrelated per part, so parts of one effect don't all land on the same angle.
+        for (int i = 0; i < parts.Length; i++)
+            parts[i].SetSpawnSeed(seed * 31 + i + 1);
+    }
+
+    // Deterministic 0..1 from an int, so the same event always picks the same angle.
+    static float Hash01(int seed)
+    {
+        uint h = (uint)seed * 2654435761u;
+        h ^= h >> 15;
+        h *= 2246822519u;
+        h ^= h >> 13;
+        return (h & 0xFFFFFFu) / (float)0x1000000;
     }
 
     // frame = ticks since the whole effect started; parts shift it by their own offset.
@@ -107,7 +146,7 @@ public partial class FrameVfx : Node3D
         // A mirrored shape spins the other way, so the whole Z angle is negated, authored included.
         // Written every frame, not just while flipping: instances are pooled, so a copy left
         // negated by an earlier flipped play would keep that rotation on its next unflipped one.
-        float z = baseRotation.Z + spin;
+        float z = baseRotation.Z + spin + spawnSpin;
         Rotation = new Vector3(baseRotation.X, baseRotation.Y, flip ? -z : z);
 
         float alpha = Mathf.Clamp(Sample(AlphaCurve, progress, 1f), 0f, 1f);
@@ -167,6 +206,11 @@ public partial class FrameVfx : Node3D
 
         owned = geometry.ToArray();
         parts = nested.ToArray();
+
+        if (SheetFrameCount > 0)
+            foreach (Visual v in owned)
+                if (v.SheetFrames > 0)
+                    v.SheetFrames = Mathf.Min(v.SheetFrames, SheetFrameCount);
     }
 
     // Stops at a nested FrameVfx, which claims everything below itself instead.

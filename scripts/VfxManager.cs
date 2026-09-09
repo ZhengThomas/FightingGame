@@ -10,6 +10,8 @@ public enum VfxKind
     DashCloudBackwards = 3,
     AirdashForward = 4,
     AirdashBackward = 5,
+    HitImpactLight = 6,
+    HitImpactHeavy = 7,
 }
 
 // Owns every one-shot visual effect: when it starts, where it sits, and when it's done.
@@ -47,6 +49,8 @@ public partial class VfxManager : Node3D
         "res://sprites/vfx/Dash CloudBackwards.tscn",
         "res://sprites/vfx/Airdash forwards.tscn",
         "res://sprites/vfx/Airdash Backwards.tscn",
+        "res://sprites/vfx/hit_impactLight.tscn",
+        "res://sprites/vfx/hit_impactHeavy.tscn",
     };
 
     // Ceiling on how many copies of one effect can exist. Pools start empty and grow only when a
@@ -137,8 +141,6 @@ public partial class VfxManager : Node3D
         foreach (Slot s in slots)
             if (s.Id == id) return;
 
-        int now = MatchManager.Current?.SimFrame ?? 0;
-
         // A free slot costs nothing, so take one if there is one.
         Slot target = null;
         foreach (Slot s in slots)
@@ -154,7 +156,7 @@ public partial class VfxManager : Node3D
             int targetRank = int.MaxValue;
             foreach (Slot s in slots)
             {
-                int rank = now - s.SpawnFrame >= s.Node.TotalDurationFrames ? 0 : 1;
+                int rank = ClockFor(s.Node) - s.SpawnFrame >= s.Node.TotalDurationFrames ? 0 : 1;
                 if (rank < targetRank || (rank == targetRank && target != null && s.SpawnFrame < target.SpawnFrame))
                 {
                     target = s;
@@ -165,12 +167,22 @@ public partial class VfxManager : Node3D
         if (target?.Node == null) return;
 
         target.Id = id;
-        target.SpawnFrame = now;
+        target.SpawnFrame = ClockFor(target.Node);
         target.Facing = facing >= 0 ? 1 : -1;
         target.OwnerNumber = ownerNumber;
 
         PlaceAt(target.Node, simX, simY);
+        target.Node.SetSpawnSeed(id);   // before the first frame, so it spawns already turned
         target.Node.SetFrame(0, target.Facing);
+    }
+
+    // SimFrame freezes during hit pause; FrameCount never does. An effect's whole life — its spawn
+    // stamp and every progress read — has to use one or the other consistently.
+    static int ClockFor(FrameVfx node)
+    {
+        MatchManager m = MatchManager.Current;
+        if (m == null) return 0;
+        return node != null && node.IgnoreHitPause ? m.FrameCount : m.SimFrame;
     }
 
     void PlaceAt(FrameVfx node, int simX, int simY)
@@ -196,14 +208,12 @@ public partial class VfxManager : Node3D
     {
         if (pools == null) return;
 
-        int sim = MatchManager.Current?.SimFrame ?? 0;
-
         foreach (List<Slot> slots in pools)
             foreach (Slot s in slots)
             {
                 if (s.Id == 0) continue;
 
-                int frame = sim - s.SpawnFrame;
+                int frame = ClockFor(s.Node) - s.SpawnFrame;
                 int duration = s.Node.TotalDurationFrames;
 
                 // Re-read the owner's position every frame rather than trusting the spawn point.

@@ -1,0 +1,81 @@
+[gd_scene format=3 uid="uid://cr5rhj2qcqxjk"]
+
+[ext_resource type="Script" uid="uid://dp2ymydadqtpj" path="res://scripts/FrameVfx.cs" id="1_onfuy"]
+[ext_resource type="Shader" uid="uid://dty2gkm5ul8a8" path="res://shaders/vfx_sprite.gdshader" id="2_2gair"]
+[ext_resource type="Texture2D" uid="uid://cugsl6vvjop" path="res://sprites/vfx/HitCircleSpritesheet.png" id="3_vemjm"]
+[ext_resource type="Texture2D" uid="uid://bjhkcym82lcv5" path="res://sprites/vfx/HitSparkSpritesheet.png" id="4_5d5h7"]
+
+[sub_resource type="Curve" id="Curve_p243i"]
+_limits = [0.0, 1.2, 0.0, 1.0]
+_data = [Vector2(0, 1), 0.0, 0.0, 0, 0, Vector2(1, 1.085083), 0.0, 0.0, 0, 0]
+point_count = 2
+
+[sub_resource type="Curve" id="Curve_onfuy"]
+_data = [Vector2(0, 1), 0.0, 0.0, 0, 0, Vector2(1, 0), 0.0, 0.0, 0, 0]
+point_count = 2
+
+[sub_resource type="ShaderMaterial" id="ShaderMaterial_onfuy"]
+resource_name = "VFX Sprite (subtractive fade)"
+render_priority = 0
+shader = ExtResource("2_2gair")
+shader_parameter/tex = ExtResource("3_vemjm")
+shader_parameter/fade = 1.0
+shader_parameter/tint = Color(1, 1, 1, 1)
+
+[sub_resource type="Curve" id="Curve_2gair"]
+_limits = [0.0, 1.2, 0.0, 1.0]
+_data = [Vector2(0, 1.0084716), 0.0, 0.0, 0, 0, Vector2(1, 1.2), 0.0, 0.0, 0, 0]
+point_count = 2
+
+[sub_resource type="Curve" id="Curve_vemjm"]
+_data = [Vector2(0, 1), 0.0, 0.0, 0, 0, Vector2(1, 0), 0.0, 0.0, 0, 0]
+point_count = 2
+
+[sub_resource type="ShaderMaterial" id="ShaderMaterial_2gair"]
+resource_name = "VFX Sprite (subtractive fade)"
+render_priority = 0
+shader = ExtResource("2_2gair")
+shader_parameter/tex = ExtResource("4_5d5h7")
+shader_parameter/fade = 1.0
+shader_parameter/tint = Color(1, 1, 1, 1)
+
+[node name="HitImpact" type="Node3D" unique_id=2132256289]
+script = ExtResource("1_onfuy")
+DurationFrames = 1
+RandRotMax = 359.0
+IgnoreHitPause = true
+
+[node name="Circle" type="Node3D" parent="." unique_id=1564826013]
+transform = Transform3D(1.1, 0, 0, 0, 1.1, 0, 0, 0, 1, 0, 0, 0)
+script = ExtResource("1_onfuy")
+DurationFrames = 12
+ScaleCurve = SubResource("Curve_p243i")
+AlphaCurve = SubResource("Curve_onfuy")
+SheetFrameCount = 10
+IgnoreHitPause = true
+
+[node name="Sprite" type="Sprite3D" parent="Circle" unique_id=804011363]
+material_override = SubResource("ShaderMaterial_onfuy")
+pixel_size = 0.003
+texture_filter = 1
+texture = ExtResource("3_vemjm")
+hframes = 4
+vframes = 3
+
+[node name="Spark" type="Node3D" parent="." unique_id=2053283891]
+transform = Transform3D(1.1, 0, 0, 0, 1.1, 0, 0, 0, 1, -0.037, 0.018, 0.1)
+visible = false
+script = ExtResource("1_onfuy")
+DurationFrames = 10
+ScaleCurve = SubResource("Curve_2gair")
+AlphaCurve = SubResource("Curve_vemjm")
+SheetFrameCount = 12
+IgnoreHitPause = true
+
+[node name="Sprite" type="Sprite3D" parent="Spark" unique_id=1767266886]
+material_override = SubResource("ShaderMaterial_2gair")
+pixel_size = 0.0035
+texture_filter = 1
+texture = ExtResource("4_5d5h7")
+hframes = 4
+vframes = 3

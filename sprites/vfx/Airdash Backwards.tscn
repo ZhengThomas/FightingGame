@@ -11,7 +11,7 @@ _data = [Vector2(0, 0.965534), 0.0, 0.67729497, 0, 0, Vector2(1, 1.2368693), 0.0
 point_count = 2
 
 [sub_resource type="Curve" id="Curve_alpha"]
-_data = [Vector2(0, 1), 0.0, -0.07801546, 0, 0, Vector2(0.6440678, 0.9107449), -0.88086635, -0.88086635, 0, 0, Vector2(1, 0), -1.2341442, 0.0, 0, 0]
+_data = [Vector2(0, 0.63405424), 0.0, -0.07801546, 0, 0, Vector2(0.63135594, 0.55372465), -0.88086635, -0.88086635, 0, 0, Vector2(1, 0), -1.2341442, 0.0, 0, 0]
 point_count = 3
 
 [sub_resource type="ShaderMaterial" id="ShaderMaterial_apyuw"]
@@ -46,7 +46,7 @@ FlipWithFacing = true
 [node name="Ring2" type="Node3D" parent="." unique_id=183253544]
 transform = Transform3D(-8.742278e-08, 2, 0, -2, -8.742278e-08, 0, 0, 0, 2, 1.0869029, 1.23, 0)
 script = ExtResource("1_apyuw")
-StartOffsetFrames = 6
+StartOffsetFrames = 4
 DurationFrames = 13
 ScaleCurve = SubResource("Curve_scale")
 AlphaCurve = SubResource("Curve_alpha")
@@ -61,7 +61,7 @@ texture = ExtResource("3_k6ply")
 [node name="Ring1" type="Node3D" parent="." unique_id=1572409290]
 transform = Transform3D(-6.556708e-08, 1.5, 0, -1.5, -6.556708e-08, 0, 0, 0, 1.5, 0.74617714, 1.23, 0)
 script = ExtResource("1_apyuw")
-StartOffsetFrames = 6
+StartOffsetFrames = 4
 DurationFrames = 13
 ScaleCurve = SubResource("Curve_scale")
 AlphaCurve = SubResource("Curve_alpha")
@@ -76,7 +76,7 @@ texture = ExtResource("3_k6ply")
 [node name="Ring3" type="Node3D" parent="." unique_id=1364286045]
 transform = Transform3D(-4.371139e-08, -1, 0, 1, -4.371139e-08, 0, 0, 0, 1, 1.6963646, 1.2190359, 0)
 script = ExtResource("1_apyuw")
-StartOffsetFrames = 6
+StartOffsetFrames = 4
 DurationFrames = 6
 ScaleCurve = SubResource("Curve_scale")
 AlphaCurve = SubResource("Curve_alpha")

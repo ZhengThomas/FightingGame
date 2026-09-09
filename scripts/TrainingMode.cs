@@ -38,6 +38,8 @@ public class TrainingMode : IGameMode
         this.match = match;
         // Nothing is ever Defeated, so the KO phase never fires and the round never ends.
         match.HealthFloor = 1;
+        // Resets already skip the count-in; the first round shouldn't be the odd one out.
+        match.SkipCountdown();
     }
 
     // Once per real frame, before the sim ticks. Deliberately not inside Tick: a resim runs that

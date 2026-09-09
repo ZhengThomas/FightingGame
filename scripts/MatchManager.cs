@@ -195,6 +195,10 @@ public partial class MatchManager : Node
 		Teleports++;
 	}
 
+	// Drop straight into the fight instead of counting in. Set before the first tick, so it can't
+	// go through RestoreRoundStart — there's no round-start snapshot to restore yet.
+	public void SkipCountdown() => flow = RoundFlow.Immediate();
+
 	// Start the round again from the top, immediately. Used by training; a normal round reset goes
 	// through the flow instead.
 	public void RestartRound()
@@ -489,6 +493,19 @@ public partial class MatchManager : Node
 						//GD.Print($"{attacker.PlayerNumber} hit {defender.PlayerNumber}!");
 						bool blocked = defender.TakeHit(hbData, hb.InstanceId, attackDir, attacker);
 						attacker.RegisterHitboxLanded(hb.InstanceId, blocked);
+
+						// Impact effect at the centre of the box overlap, so it lands where the blow
+						// connected rather than at either fighter's origin. InstanceId is unique per
+						// hitbox spawn and stable across a resim, so it doubles as the dedup key.
+						if (!blocked)
+						{
+							int cx = (Math.Max(hLeft, dLeft) + Math.Min(hRight, dRight)) / 2;
+							int cy = (Math.Max(hBottom, dBottom) + Math.Min(hTop, dTop)) / 2;
+							bool light = hbData.Strength == MoveType.Light || hbData.Strength == MoveType.CrouchLight;
+							VfxKind impact = light ? VfxKind.HitImpactLight : VfxKind.HitImpactHeavy;
+							VfxManager.Current?.Request(impact, hb.InstanceId, cx, cy, attackDir);
+						}
+
 						attacker.MarkCurrentMoveLanded(blocked);
 						TriggerHitPause(hbData.HitPauseDuration, hbData.Strength);
 						frontPlayerNumber = attacker.PlayerNumber;

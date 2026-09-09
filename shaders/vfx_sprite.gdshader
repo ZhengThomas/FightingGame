@@ -1,5 +1,8 @@
 shader_type spatial;
-render_mode blend_mix, depth_draw_opaque, cull_disabled, unshaded;
+render_mode blend_mix, depth_draw_never, depth_test_disabled, cull_disabled, unshaded;
+// depth_test_disabled: VFX draw over the stage and characters whatever the depth says.
+// They still sort among themselves and stay under the camera-parented HUD sprites, which
+// are nearer the camera and so drawn later in the transparent pass.
 
 // Sprite VFX whose fade SUBTRACTS from every pixel's alpha instead of scaling it. Dropping fade by
 // 1% removes 1% of alpha from every pixel, so faint pixels reach zero and vanish while the ones

@@ -11,7 +11,7 @@ _data = [Vector2(0, 0.1), 0.0, 4.0, 0, 0, Vector2(1, 1.4234124), 0.0, 0.0, 0, 0]
 point_count = 2
 
 [sub_resource type="Curve" id="Curve_alpha"]
-_data = [Vector2(0, 0.5626502), 0.0, -0.07801546, 0, 0, Vector2(1, 0), -1.2341442, 0.0, 0, 0]
+_data = [Vector2(0, 0.7679368), 0.0, -0.07801546, 0, 0, Vector2(1, 0), -1.2341442, 0.0, 0, 0]
 point_count = 2
 
 [sub_resource type="ShaderMaterial" id="ShaderMaterial_4pipp"]
