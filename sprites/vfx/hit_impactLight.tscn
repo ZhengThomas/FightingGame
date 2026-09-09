@@ -40,6 +40,7 @@ shader_parameter/fade = 1.0
 shader_parameter/tint = Color(1, 1, 1, 1)
 
 [node name="HitImpact" type="Node3D" unique_id=2132256289]
+transform = Transform3D(0.8, 0, 0, 0, 0.8, 0, 0, 0, 1, 0, 0, 0)
 script = ExtResource("1_onfuy")
 DurationFrames = 1
 RandRotMax = 359.0
@@ -64,7 +65,6 @@ vframes = 3
 
 [node name="Spark" type="Node3D" parent="." unique_id=2053283891]
 transform = Transform3D(1.1, 0, 0, 0, 1.1, 0, 0, 0, 1, -0.037, 0.018, 0.1)
-visible = false
 script = ExtResource("1_onfuy")
 DurationFrames = 10
 ScaleCurve = SubResource("Curve_2gair")

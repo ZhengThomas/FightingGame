@@ -31,7 +31,7 @@ public static class Moveset
         BoxesPerFrame = [[new Box { X = 8000, Y = 3000, Width = 3000, Height = 1500 }]],
         ActiveDuration = 2,
         Damage = 30, HitStun = 12, BlockStun = 8, Pushback = 667, LaunchForce = 500,
-        Strength = MoveType.Light,
+        Strength = MoveType.Light, IsLow = true,
         HitstunProrationSteps = 0,
     };
 

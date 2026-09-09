@@ -11,7 +11,9 @@ public enum VfxKind
     AirdashForward = 4,
     AirdashBackward = 5,
     HitImpactLight = 6,
-    HitImpactHeavy = 7,
+    HitImpactMedium = 7,
+    HitImpactHeavy = 8,
+    BlockImpact = 9,
 }
 
 // Owns every one-shot visual effect: when it starts, where it sits, and when it's done.
@@ -50,7 +52,9 @@ public partial class VfxManager : Node3D
         "res://sprites/vfx/Airdash forwards.tscn",
         "res://sprites/vfx/Airdash Backwards.tscn",
         "res://sprites/vfx/hit_impactLight.tscn",
-        "res://sprites/vfx/hit_impactHeavy.tscn",
+        "res://sprites/vfx/hit_impactSliceMedium.tscn",
+        "res://sprites/vfx/hit_impactSliceHeavy.tscn",
+        "res://sprites/vfx/block_impact.tscn",
     };
 
     // Ceiling on how many copies of one effect can exist. Pools start empty and grow only when a

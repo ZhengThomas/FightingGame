@@ -497,14 +497,21 @@ public partial class MatchManager : Node
 						// Impact effect at the centre of the box overlap, so it lands where the blow
 						// connected rather than at either fighter's origin. InstanceId is unique per
 						// hitbox spawn and stable across a resim, so it doubles as the dedup key.
-						if (!blocked)
-						{
-							int cx = (Math.Max(hLeft, dLeft) + Math.Min(hRight, dRight)) / 2;
-							int cy = (Math.Max(hBottom, dBottom) + Math.Min(hTop, dTop)) / 2;
-							bool light = hbData.Strength == MoveType.Light || hbData.Strength == MoveType.CrouchLight;
-							VfxKind impact = light ? VfxKind.HitImpactLight : VfxKind.HitImpactHeavy;
-							VfxManager.Current?.Request(impact, hb.InstanceId, cx, cy, attackDir);
-						}
+						int cx = (Math.Max(hLeft, dLeft) + Math.Min(hRight, dRight)) / 2;
+						int cy = (Math.Max(hBottom, dBottom) + Math.Min(hTop, dTop)) / 2;
+
+						// A block lands on the guard, not inside the defender, so slide it out to
+						// whichever side the blow came from. attackDir 1 means the attacker is to
+						// the left, so the near edge is dLeft. Height stays where they connected.
+						if (blocked) cx = attackDir > 0 ? (dLeft + 3000) : (dRight - 3000);
+
+						bool light = hbData.Strength == MoveType.Light || hbData.Strength == MoveType.CrouchLight;
+						bool medium = hbData.Strength == MoveType.Medium || hbData.Strength == MoveType.CrouchMedium;
+						VfxKind impact = blocked ? VfxKind.BlockImpact
+							: light ? VfxKind.HitImpactLight
+							: medium ? VfxKind.HitImpactMedium
+							: VfxKind.HitImpactHeavy;
+						VfxManager.Current?.Request(impact, hb.InstanceId, cx, cy, attackDir);
 
 						attacker.MarkCurrentMoveLanded(blocked);
 						TriggerHitPause(hbData.HitPauseDuration, hbData.Strength);
